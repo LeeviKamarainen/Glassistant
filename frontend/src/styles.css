@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+/* ── Theme tokens ──────────────────────────────────────────────────────────
+   Defaults are overridden at runtime by useTheme() setting CSS variables
+   on the :root element. All themes keep --theme-bg near-black because the
+   magic mirror needs deep black to stay reflective. */
+
+:root {
+  --theme-bg: #000000;
+  --theme-fg: #ffffff;
+  --theme-accent: #fbbf24;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--theme-bg);
+  color: var(--theme-fg);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  transition: background-color 600ms ease, color 600ms ease;
+}
+
+.text-fg       { color: var(--theme-fg); }
+.text-fg-soft  { color: color-mix(in srgb, var(--theme-fg) 85%, transparent); }
+.text-fg-dim   { color: color-mix(in srgb, var(--theme-fg) 65%, transparent); }
+.text-fg-faint { color: color-mix(in srgb, var(--theme-fg) 40%, transparent); }
+.text-accent   { color: var(--theme-accent); }
+.fill-accent   { fill: var(--theme-accent); }
+
+/* ── Widget animations ────────────────────────────────────────────────────
+   Calm: slow, low-amplitude. The mirror is glanceable, not attention-grabbing. */
+
+@keyframes tick-in {
+  0%   { opacity: 0;   transform: translateY(-6px); }
+  35%  { opacity: 1;   transform: translateY(0); }
+  100% { opacity: 0.9; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sun-spin   { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes sun-pulse  { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+@keyframes cloud-drift{ 0%, 100% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+@keyframes raindrop   { 0% { opacity: 0; transform: translateY(-4px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(26px); } }
+@keyframes snowflake  { 0% { opacity: 0; transform: translateY(-4px) rotate(0deg); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(28px) rotate(180deg); } }
+@keyframes lightning  { 0%, 68%, 100% { opacity: 0; } 70%, 74% { opacity: 1; } 76% { opacity: 0.25; } 80% { opacity: 0.95; } }
+@keyframes fog-drift  { 0%, 100% { transform: translateX(-4px); } 50% { transform: translateX(4px); } }
+
+.anim-tick      { animation: tick-in 0.6s ease-out both; }
+.anim-fade-in   { animation: fade-in 0.5s ease-out both; }
+.anim-sun-spin  { animation: sun-spin 30s linear infinite; transform-origin: center; }
+.anim-sun-pulse { animation: sun-pulse 3.5s ease-in-out infinite; }
+.anim-cloud     { animation: cloud-drift 7s ease-in-out infinite; }
+.anim-fog       { animation: fog-drift 6s ease-in-out infinite; }
+.anim-rain      { animation: raindrop 1.4s linear infinite; }
+.anim-snow      { animation: snowflake 3.5s linear infinite; transform-origin: center; }
+.anim-bolt      { animation: lightning 4.5s ease-in-out infinite; }
+
+/* ── Full-screen weather overlay animations ──────────────────────────────── */
+
+@keyframes fx-fall {
+  from { transform: translateY(-12vh); opacity: 0; }
+  10%  { opacity: 0.55; }
+  100% { transform: translateY(112vh); opacity: 0; }
+}
+
+@keyframes fx-snowfall {
+  from { transform: translate3d(0, -12vh, 0) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.85; }
+  50%  { transform: translate3d(14px, 50vh, 0) rotate(180deg); }
+  100% { transform: translate3d(0, 112vh, 0) rotate(360deg); opacity: 0; }
+}
+
+@keyframes fx-flash {
+  0%, 86%, 100% { background-color: rgba(255, 255, 255, 0); }
+  88%, 92%      { background-color: rgba(255, 255, 255, 0.07); }
+  94%           { background-color: rgba(255, 255, 255, 0.02); }
+  95%, 97%      { background-color: rgba(255, 255, 255, 0.09); }
+}
+
+@keyframes fx-fog-drift {
+  from { transform: translateX(-110%); }
+  to   { transform: translateX(110vw); }
+}
+
+@keyframes fx-fog-breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+.fx-overlay { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.fx-drop    { position: absolute; top: 0; width: 1px; height: 14px; background: rgba(255, 255, 255, 0.45); animation: fx-fall linear infinite; }
+.fx-flake   { position: absolute; top: 0; color: rgba(255, 255, 255, 0.78); animation: fx-snowfall linear infinite; will-change: transform; }
+.fx-flash   { position: absolute; inset: 0; animation: fx-flash 9s ease-in-out infinite; }
+
+/* Fog: a base haze that washes the whole screen + three drifting wisps at
+   different bands and speeds. Tuned to be clearly visible without making
+   widget text unreadable. */
+.fx-fog-base {
+  position: absolute;
+  inset: 0;
+  background: rgba(210, 215, 225, 0.10);
+  animation: fx-fog-breathe 14s ease-in-out infinite;
+}
+.fx-fog-wisp {
+  position: absolute;
+  width: 90vw;
+  height: 55vh;
+  will-change: transform;
+}
+.fx-fog-wisp-1 {
+  top: 4%;
+  background: radial-gradient(ellipse at center,
+    rgba(230, 232, 240, 0.42) 0%,
+    rgba(230, 232, 240, 0.20) 35%,
+    transparent 70%);
+  animation: fx-fog-drift 42s linear infinite;
+  animation-delay: -6s;
+}
+.fx-fog-wisp-2 {
+  top: 32%;
+  background: radial-gradient(ellipse at center,
+    rgba(230, 232, 240, 0.50) 0%,
+    rgba(230, 232, 240, 0.25) 35%,
+    transparent 70%);
+  animation: fx-fog-drift 58s linear infinite reverse;
+  animation-delay: -22s;
+}
+.fx-fog-wisp-3 {
+  top: 58%;
+  background: radial-gradient(ellipse at center,
+    rgba(230, 232, 240, 0.38) 0%,
+    rgba(230, 232, 240, 0.18) 35%,
+    transparent 70%);
+  animation: fx-fog-drift 72s linear infinite;
+  animation-delay: -40s;
+}
+
+/* Clear: warm accent-colored glow in the upper-left, gentle pulse. */
+@keyframes fx-clear-pulse {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1.0; }
+}
+.fx-clear-glow {
+  position: absolute;
+  top: -25vh; left: -20vw;
+  width: 85vw; height: 90vh;
+  background: radial-gradient(ellipse at top left,
+    color-mix(in srgb, var(--theme-accent) 28%, transparent) 0%,
+    color-mix(in srgb, var(--theme-accent) 10%, transparent) 28%,
+    transparent 62%);
+  animation: fx-clear-pulse 8s ease-in-out infinite;
+}
+.fx-clear-glow-soft {
+  /* Smaller, weaker variant for partly-cloudy. */
+  position: absolute;
+  top: -15vh; left: -10vw;
+  width: 55vw; height: 60vh;
+  background: radial-gradient(ellipse at top left,
+    color-mix(in srgb, var(--theme-accent) 18%, transparent) 0%,
+    color-mix(in srgb, var(--theme-accent) 6%, transparent) 30%,
+    transparent 65%);
+  animation: fx-clear-pulse 9s ease-in-out infinite;
+}
+
+/* Cloudy: slow-drifting soft cloud blobs near the top of the screen. */
+.fx-cloud-blob {
+  position: absolute;
+  width: 70vw; height: 40vh;
+  will-change: transform;
+}
+.fx-cloud-blob-1 {
+  top: -6vh;
+  background: radial-gradient(ellipse at center,
+    rgba(205, 210, 220, 0.26) 0%,
+    rgba(205, 210, 220, 0.12) 38%,
+    transparent 70%);
+  animation: fx-fog-drift 80s linear infinite;
+  animation-delay: -10s;
+}
+.fx-cloud-blob-2 {
+  top: 12vh;
+  background: radial-gradient(ellipse at center,
+    rgba(205, 210, 220, 0.22) 0%,
+    rgba(205, 210, 220, 0.09) 40%,
+    transparent 72%);
+  animation: fx-fog-drift 110s linear infinite reverse;
+  animation-delay: -55s;
+}
+.fx-cloud-blob-3 {
+  top: 4vh;
+  background: radial-gradient(ellipse at center,
+    rgba(205, 210, 220, 0.20) 0%,
+    rgba(205, 210, 220, 0.08) 40%,
+    transparent 72%);
+  animation: fx-fog-drift 95s linear infinite;
+  animation-delay: -75s;
+}

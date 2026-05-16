@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Recurse -Depth 4 \"D:\\\\Glassistant\")",
+      "Bash(Select-Object FullName, LastWriteTime)",
+      "Bash(Sort-Object FullName)"
+    ]
+  }
+}
