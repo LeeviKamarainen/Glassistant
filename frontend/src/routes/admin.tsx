@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminGrid } from "../components/AdminGrid";
 import { WeatherEffect } from "../components/WeatherEffect";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import type { WeatherCondition } from "../components/widgets/weather/icons";
@@ -10,7 +11,7 @@ import type { EffectStyle } from "../lib/useEffectStyle";
 import { useTheme } from "../lib/useTheme";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
-import { GRID_SIZE } from "../lib/types";
+import { useGridConfig } from "../lib/useGridConfig";
 import type { Layout, SseEvent, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
 
 type AdminTab = "layout" | "components";
@@ -18,14 +19,22 @@ type AdminTab = "layout" | "components";
 export default function Admin() {
   const theme = useTheme();
   const effectStyle = useEffectStyle();
+  const gridConfig = useGridConfig();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("layout");
   const [layout, setLayout] = useState<Layout | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [previewCondition, setPreviewCondition] = useState<
-    WeatherCondition | "off"
-  >("off");
+  const [previewCondition, setPreviewCondition] = useState<WeatherCondition | "off">("off");
+
+  // Local pending state for grid config edits
+  const [pendingRows, setPendingRows] = useState(gridConfig.rows);
+  const [pendingCols, setPendingCols] = useState(gridConfig.cols);
+
+  useEffect(() => {
+    setPendingRows(gridConfig.rows);
+    setPendingCols(gridConfig.cols);
+  }, [gridConfig.rows, gridConfig.cols]);
 
   const refresh = useCallback(async () => {
     try {
@@ -69,6 +78,14 @@ export default function Admin() {
     if (!window.confirm("Reset layout to defaults?")) return;
     return run(() => api.resetLayout());
   };
+  const onSaveGrid = () =>
+    run(async () => {
+      if (pendingRows !== gridConfig.rows) await gridConfig.setRows(pendingRows);
+      if (pendingCols !== gridConfig.cols) await gridConfig.setCols(pendingCols);
+      return undefined as unknown as Layout;
+    });
+
+  const gridDirty = pendingRows !== gridConfig.rows || pendingCols !== gridConfig.cols;
 
   return (
     <div className="relative min-h-screen w-full text-fg" style={{ backgroundColor: "var(--theme-bg)" }}>
@@ -99,7 +116,7 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Theme + effects — always visible above tabs */}
+        {/* Theme */}
         <section className="mb-8">
           <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Theme</h2>
           <div className="flex flex-wrap gap-2">
@@ -115,6 +132,7 @@ export default function Admin() {
           </div>
         </section>
 
+        {/* Weather effect style */}
         <section className="mb-8">
           <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">
             Weather effect style
@@ -132,6 +150,41 @@ export default function Admin() {
           </div>
         </section>
 
+        {/* Grid configuration */}
+        <section className="mb-8">
+          <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Grid size</h2>
+          <div className="flex flex-wrap items-end gap-3">
+            <NumberInput
+              label="Rows"
+              value={pendingRows}
+              onChange={setPendingRows}
+              min={1}
+              max={50}
+            />
+            <NumberInput
+              label="Cols"
+              value={pendingCols}
+              onChange={setPendingCols}
+              min={1}
+              max={50}
+            />
+            <button
+              type="button"
+              onClick={onSaveGrid}
+              disabled={busy || !gridDirty}
+              className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
+            >
+              Save
+            </button>
+            {!gridDirty && (
+              <span className="text-xs text-fg-faint">
+                {gridConfig.rows}r × {gridConfig.cols}c
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* Preview weather effect */}
         <section className="mb-8">
           <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">
             Preview weather effect
@@ -177,13 +230,34 @@ export default function Admin() {
 
         {activeTab === "layout" && (
           <>
+            {layout && (
+              <section className="mb-8">
+                <h2 className="mb-4 text-sm uppercase tracking-wide text-fg-dim">
+                  Layout editor
+                </h2>
+                <AdminGrid
+                  widgets={layout.widgets}
+                  gridRows={gridConfig.rows}
+                  gridCols={gridConfig.cols}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                  busy={busy}
+                />
+              </section>
+            )}
+
             <section className="mb-8">
               <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Add widget</h2>
-              <AddWidgetForm onSubmit={onCreate} disabled={busy} />
+              <AddWidgetForm
+                onSubmit={onCreate}
+                disabled={busy}
+                gridRows={gridConfig.rows}
+                gridCols={gridConfig.cols}
+              />
             </section>
 
             <section>
-              <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Current layout</h2>
+              <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">All widgets</h2>
               {!layout ? (
                 <div className="text-fg-faint">Loading…</div>
               ) : layout.widgets.length === 0 ? (
@@ -197,6 +271,8 @@ export default function Admin() {
                       onUpdate={onUpdate}
                       onDelete={onDelete}
                       disabled={busy}
+                      gridRows={gridConfig.rows}
+                      gridCols={gridConfig.cols}
                     />
                   ))}
                 </ul>
@@ -206,7 +282,12 @@ export default function Admin() {
         )}
 
         {activeTab === "components" && (
-          <ComponentBrowser onAdd={onCreate} disabled={busy} />
+          <ComponentBrowser
+            onAdd={onCreate}
+            disabled={busy}
+            gridRows={gridConfig.rows}
+            gridCols={gridConfig.cols}
+          />
         )}
 
         <footer className="mt-10 text-xs text-fg-faint">
@@ -224,9 +305,13 @@ export default function Admin() {
 function ComponentBrowser({
   onAdd,
   disabled,
+  gridRows,
+  gridCols,
 }: {
   onAdd: (w: WidgetCreate) => Promise<unknown>;
   disabled: boolean;
+  gridRows: number;
+  gridCols: number;
 }) {
   const [query, setQuery] = useState("");
   const [expanding, setExpanding] = useState<string | null>(null);
@@ -269,6 +354,8 @@ function ComponentBrowser({
                   setExpanding(null);
                 }}
                 disabled={disabled}
+                gridRows={gridRows}
+                gridCols={gridCols}
               />
             );
           })}
@@ -285,6 +372,8 @@ function ComponentCard({
   onExpand,
   onAdd,
   disabled,
+  gridRows,
+  gridCols,
 }: {
   typeKey: string;
   meta: (typeof WIDGET_REGISTRY)[string];
@@ -292,6 +381,8 @@ function ComponentCard({
   onExpand: () => void;
   onAdd: (w: WidgetCreate) => Promise<void>;
   disabled: boolean;
+  gridRows: number;
+  gridCols: number;
 }) {
   const [row, setRow] = useState(0);
   const [col, setCol] = useState(0);
@@ -329,7 +420,6 @@ function ComponentCard({
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
-      {/* Live preview */}
       <div
         className="flex items-center justify-center w-full overflow-hidden bg-black/60 p-8"
         style={{ minHeight: previewHeight }}
@@ -337,7 +427,6 @@ function ComponentCard({
         <Component widget={mockWidget} />
       </div>
 
-      {/* Info + actions */}
       <div className="p-3 border-t border-white/10">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -370,10 +459,10 @@ function ComponentCard({
             onSubmit={submit}
             className="mt-3 grid grid-cols-4 gap-2 border-t border-white/10 pt-3"
           >
-            <NumberInput label="Row" value={row} onChange={setRow} max={GRID_SIZE - 1} />
-            <NumberInput label="Col" value={col} onChange={setCol} max={GRID_SIZE - 1} />
-            <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={GRID_SIZE} />
-            <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={GRID_SIZE} />
+            <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
+            <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
+            <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+            <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
             <button
               type="submit"
               disabled={disabled}
@@ -461,9 +550,13 @@ function ThemeSwatch({
 function AddWidgetForm({
   onSubmit,
   disabled,
+  gridRows,
+  gridCols,
 }: {
   onSubmit: (w: WidgetCreate) => Promise<unknown>;
   disabled: boolean;
+  gridRows: number;
+  gridCols: number;
 }) {
   const [type, setType] = useState<string>(WIDGET_TYPES[0] ?? "clock");
   const [row, setRow] = useState(0);
@@ -488,10 +581,10 @@ function AddWidgetForm({
       className="grid grid-cols-2 gap-2 rounded-md border border-white/10 bg-white/5 p-3 sm:grid-cols-6"
     >
       <Select label="Type" value={type} onChange={setType} options={WIDGET_TYPES} />
-      <NumberInput label="Row" value={row} onChange={setRow} max={GRID_SIZE - 1} />
-      <NumberInput label="Col" value={col} onChange={setCol} max={GRID_SIZE - 1} />
-      <NumberInput label="Row span" value={rowSpan} onChange={setRowSpan} min={1} max={GRID_SIZE} />
-      <NumberInput label="Col span" value={colSpan} onChange={setColSpan} min={1} max={GRID_SIZE} />
+      <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
+      <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
+      <NumberInput label="Row span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+      <NumberInput label="Col span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
       <button
         type="submit"
         disabled={disabled}
@@ -508,49 +601,53 @@ function WidgetRow({
   onUpdate,
   onDelete,
   disabled,
+  gridRows,
+  gridCols,
 }: {
   widget: Widget;
   onUpdate: (id: number, patch: WidgetUpdate) => Promise<unknown>;
   onDelete: (id: number) => Promise<unknown>;
   disabled: boolean;
+  gridRows: number;
+  gridCols: number;
 }) {
-  const [type, setType] = useState(widget.type);
   const [row, setRow] = useState(widget.row);
   const [col, setCol] = useState(widget.col);
   const [rowSpan, setRowSpan] = useState(widget.row_span);
   const [colSpan, setColSpan] = useState(widget.col_span);
 
   useEffect(() => {
-    setType(widget.type);
     setRow(widget.row);
     setCol(widget.col);
     setRowSpan(widget.row_span);
     setColSpan(widget.col_span);
-  }, [widget.id, widget.type, widget.row, widget.col, widget.row_span, widget.col_span]);
+  }, [widget.id, widget.row, widget.col, widget.row_span, widget.col_span]);
 
   const dirty =
-    type !== widget.type ||
     row !== widget.row ||
     col !== widget.col ||
     rowSpan !== widget.row_span ||
     colSpan !== widget.col_span;
 
   return (
-    <li className="grid grid-cols-2 items-end gap-2 rounded-md border border-white/10 bg-white/5 p-3 sm:grid-cols-8">
-      <div className="col-span-2 sm:col-span-1 text-xs uppercase tracking-wide text-fg-faint">
-        #{widget.id}
+    <li className="grid grid-cols-2 items-end gap-2 rounded-md border border-white/10 bg-white/5 p-3 sm:grid-cols-7">
+      <div className="sm:col-span-1">
+        <div className="text-xs uppercase tracking-wide text-fg-faint">
+          #{widget.id} · {widget.type}
+        </div>
+        <div className="text-sm text-fg-dim">
+          {widget.enabled ? "enabled" : "disabled"}
+        </div>
       </div>
-      <Select label="Type" value={type} onChange={setType} options={WIDGET_TYPES} />
-      <NumberInput label="Row" value={row} onChange={setRow} max={GRID_SIZE - 1} />
-      <NumberInput label="Col" value={col} onChange={setCol} max={GRID_SIZE - 1} />
-      <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={GRID_SIZE} />
-      <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={GRID_SIZE} />
+      <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
+      <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
+      <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+      <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
       <button
         type="button"
         disabled={disabled || !dirty}
         onClick={() =>
           onUpdate(widget.id, {
-            type,
             row,
             col,
             row_span: rowSpan,

@@ -7,11 +7,13 @@ import { useSse } from "../lib/sse";
 import { useEffectStyle } from "../lib/useEffectStyle";
 import { THEMES } from "../lib/themes";
 import { useTheme } from "../lib/useTheme";
+import { useGridConfig } from "../lib/useGridConfig";
 import type { Layout, SseEvent } from "../lib/types";
 
 export default function Mirror() {
   const theme = useTheme();
   const effectStyle = useEffectStyle();
+  const gridConfig = useGridConfig();
 
   const [layout, setLayout] = useState<Layout | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,6 @@ export default function Mirror() {
     ),
   );
 
-  // Anchor the ambient effect to the first enabled Weather widget's location
-  // when one exists. Falls through to WeatherEffect's default location otherwise.
   const ambient = useMemo(() => {
     const w = layout?.widgets.find((x) => x.type === "weather" && x.enabled);
     const cfg = w?.config as { lat?: number; lon?: number } | undefined;
@@ -65,7 +65,13 @@ export default function Mirror() {
             {error}
           </div>
         )}
-        {layout && <Grid widgets={layout.widgets} />}
+        {layout && (
+          <Grid
+            widgets={layout.widgets}
+            gridRows={gridConfig.rows}
+            gridCols={gridConfig.cols}
+          />
+        )}
       </div>
     </div>
   );

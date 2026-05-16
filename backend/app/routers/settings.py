@@ -16,11 +16,16 @@ from app.schemas.settings import (
 
 router = APIRouter(prefix="/api", tags=["settings"])
 
-# Settings that must validate against a fixed enum. Other keys are accepted
-# as opaque strings.
+# Settings that must be one of a fixed set of strings.
 _ENUM_VALUES: dict[str, set[str]] = {
     "theme": KNOWN_THEMES,
     "weather_effect_style": KNOWN_EFFECT_STYLES,
+}
+
+# Settings that must be integers within [lo, hi].
+_INT_RANGE: dict[str, tuple[int, int]] = {
+    "grid_rows": (1, 50),
+    "grid_cols": (1, 50),
 }
 
 
@@ -51,6 +56,21 @@ async def put_setting(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"invalid value for {key}; expected one of {sorted(allowed)}",
         )
+    int_range = _INT_RANGE.get(key)
+    if int_range is not None:
+        try:
+            v = int(body.value)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{key} must be an integer",
+            )
+        lo, hi = int_range
+        if not (lo <= v <= hi):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{key} must be between {lo} and {hi}",
+            )
     settings_repo.set_value(conn, key, body.value)
     await _publish_settings_changed(broadcaster, conn)
     return SettingsOut(settings=settings_repo.get_all(conn))

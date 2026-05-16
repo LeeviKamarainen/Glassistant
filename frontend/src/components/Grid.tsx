@@ -1,23 +1,24 @@
 import type { ReactNode } from "react";
 
-import { GRID_SIZE } from "../lib/types";
 import type { Widget } from "../lib/types";
 import { WIDGETS } from "./widgets/registry";
 
 interface GridProps {
   widgets: Widget[];
+  gridRows: number;
+  gridCols: number;
   /** When true, hide disabled widgets entirely (mirror view). */
   hideDisabled?: boolean;
 }
 
-export function Grid({ widgets, hideDisabled = true }: GridProps) {
+export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridProps) {
   const visible = hideDisabled ? widgets.filter((w) => w.enabled) : widgets;
   return (
     <div
       className="grid h-full w-full gap-4 p-6"
       style={{
-        gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
       }}
     >
       {visible.map((widget) => (

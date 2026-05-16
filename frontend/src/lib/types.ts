@@ -58,4 +58,3 @@ export type SseEvent =
   | { type: "settings_changed"; payload: SettingsPayload }
   | { type: string; payload: unknown };
 
-export const GRID_SIZE = 3;

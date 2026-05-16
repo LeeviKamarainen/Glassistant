@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
-from app.schemas.widget import GRID_SIZE, WidgetCreate, WidgetOut, WidgetUpdate
+from app.schemas.widget import WidgetCreate, WidgetOut, WidgetUpdate
 
 
 class WidgetError(Exception):
@@ -37,10 +37,25 @@ def _cells(row: int, col: int, row_span: int, col_span: int) -> set[tuple[int, i
     return {(r, c) for r in range(row, row + row_span) for c in range(col, col + col_span)}
 
 
-def _check_bounds(row: int, col: int, row_span: int, col_span: int) -> None:
-    if not (0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE):
+def get_grid_dims(conn: sqlite3.Connection) -> tuple[int, int]:
+    """Read configured grid dimensions from app_settings, falling back to defaults."""
+    rows_row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'grid_rows'"
+    ).fetchone()
+    cols_row = conn.execute(
+        "SELECT value FROM app_settings WHERE key = 'grid_cols'"
+    ).fetchone()
+    rows = int(rows_row["value"]) if rows_row else 12
+    cols = int(cols_row["value"]) if cols_row else 7
+    return rows, cols
+
+
+def _check_bounds(
+    row: int, col: int, row_span: int, col_span: int, grid_rows: int, grid_cols: int
+) -> None:
+    if not (0 <= row < grid_rows and 0 <= col < grid_cols):
         raise WidgetError("position out of bounds")
-    if row + row_span > GRID_SIZE or col + col_span > GRID_SIZE:
+    if row + row_span > grid_rows or col + col_span > grid_cols:
         raise WidgetError("widget exceeds grid bounds")
     if row_span < 1 or col_span < 1:
         raise WidgetError("spans must be >= 1")
@@ -78,7 +93,8 @@ def get_widget(conn: sqlite3.Connection, widget_id: int) -> WidgetOut | None:
 
 
 def create_widget(conn: sqlite3.Connection, data: WidgetCreate) -> WidgetOut:
-    _check_bounds(data.row, data.col, data.row_span, data.col_span)
+    grid_rows, grid_cols = get_grid_dims(conn)
+    _check_bounds(data.row, data.col, data.row_span, data.col_span, grid_rows, grid_cols)
     if data.enabled:
         _check_no_overlap(conn, data.row, data.col, data.row_span, data.col_span, exclude_id=None)
     cur = conn.execute(
@@ -114,7 +130,8 @@ def update_widget(
     merged = existing.model_copy(
         update={k: v for k, v in patch.model_dump(exclude_unset=True).items()}
     )
-    _check_bounds(merged.row, merged.col, merged.row_span, merged.col_span)
+    grid_rows, grid_cols = get_grid_dims(conn)
+    _check_bounds(merged.row, merged.col, merged.row_span, merged.col_span, grid_rows, grid_cols)
     if merged.enabled:
         _check_no_overlap(
             conn,
@@ -155,10 +172,12 @@ def delete_widget(conn: sqlite3.Connection, widget_id: int) -> bool:
     return cur.rowcount > 0
 
 
+# Default layout for a 12-row × 7-col portrait grid.
+# Clock takes the top-left, weather top-right, date below the clock.
 DEFAULT_LAYOUT: list[WidgetCreate] = [
-    WidgetCreate(type="clock", row=0, col=1, row_span=1, col_span=1),
-    WidgetCreate(type="date", row=0, col=2, row_span=1, col_span=1),
-    WidgetCreate(type="weather", row=1, col=0, row_span=1, col_span=1),
+    WidgetCreate(type="clock",   row=0, col=0, row_span=3, col_span=4),
+    WidgetCreate(type="date",    row=3, col=0, row_span=1, col_span=4),
+    WidgetCreate(type="weather", row=0, col=4, row_span=2, col_span=3),
 ]
 
 
