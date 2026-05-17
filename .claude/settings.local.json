@@ -3,7 +3,10 @@
     "allow": [
       "Bash(Get-ChildItem -Recurse -Depth 4 \"D:\\\\Glassistant\")",
       "Bash(Select-Object FullName, LastWriteTime)",
-      "Bash(Sort-Object FullName)"
+      "Bash(Sort-Object FullName)",
+      "WebFetch(domain:digitransit.fi)",
+      "WebFetch(domain:api.digitransit.fi)",
+      "WebFetch(domain:docs.opentripplanner.org)"
     ]
   }
 }

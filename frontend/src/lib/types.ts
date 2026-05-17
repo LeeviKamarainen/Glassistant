@@ -53,6 +53,32 @@ export interface SettingsPayload {
   settings: Record<string, string>;
 }
 
+export interface TransitLeg {
+  mode: string;
+  from_name: string;
+  to_name: string;
+  start_time: string;
+  end_time: string;
+  route_short_name: string | null;
+  headsign: string | null;
+}
+
+export interface TransitItinerary {
+  duration_seconds: number;
+  departure: string;
+  arrival: string;
+  legs: TransitLeg[];
+}
+
+export interface TransitPlanResponse {
+  itineraries: TransitItinerary[];
+}
+
+export interface SystemConfig {
+  home_lat: number;
+  home_lon: number;
+}
+
 export type SseEvent =
   | { type: "layout_changed"; payload: Layout }
   | { type: "settings_changed"; payload: SettingsPayload }

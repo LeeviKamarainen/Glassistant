@@ -4,6 +4,7 @@ import type { Widget } from "../../lib/types";
 import { Clock } from "./Clock";
 import { DateW } from "./DateW";
 import { DateTime } from "./DateTime";
+import { Transit } from "./Transit";
 import { Weather } from "./Weather";
 import { WeatherForecast } from "./WeatherForecast";
 
@@ -48,6 +49,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetMeta> = {
     label: "Weather Forecast",
     description: "Today's conditions large, with a compact 3-day forecast below.",
     defaultSize: { rowSpan: 2, colSpan: 1 },
+  },
+  transit: {
+    component: Transit,
+    label: "Transit",
+    description: "Upcoming HSL departures for configured routes (train, bus, tram).",
+    defaultSize: { rowSpan: 1, colSpan: 2 },
   },
 };
 

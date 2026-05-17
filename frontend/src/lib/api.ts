@@ -1,6 +1,8 @@
 import type {
   Layout,
   SettingsPayload,
+  SystemConfig,
+  TransitPlanResponse,
   WeatherPayload,
   Widget,
   WidgetCreate,
@@ -55,4 +57,18 @@ export const api = {
     request<SettingsPayload>("PUT", `/api/settings/${encodeURIComponent(key)}`, {
       value,
     }),
+  getSystemConfig: () => request<SystemConfig>("GET", "/api/system"),
+  planTransit: (
+    origin: { lat: number; lon: number },
+    destination: { lat: number; lon: number },
+    num: number,
+    modes?: string[],
+    signal?: AbortSignal,
+  ) =>
+    request<TransitPlanResponse>(
+      "POST",
+      "/api/transit/plan",
+      { origin, destination, num, modes: modes?.length ? modes : undefined },
+      signal,
+    ),
 };

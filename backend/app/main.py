@@ -16,7 +16,10 @@ from app.repositories import widgets as widgets_repo
 from app.routers import events as events_router
 from app.routers import layout as layout_router
 from app.routers import settings as settings_router
+from app.routers import system as system_router
+from app.routers import transit as transit_router
 from app.routers import weather as weather_router
+from app.services.transit import TransitService
 from app.services.weather import WeatherService
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
@@ -34,10 +37,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.broadcaster = Broadcaster()
     app.state.weather = WeatherService(ttl_seconds=settings.weather_cache_ttl_seconds)
+    app.state.transit = (
+        TransitService(api_key=settings.digitransit_api_key)
+        if settings.digitransit_api_key
+        else None
+    )
     try:
         yield
     finally:
         await app.state.weather.aclose()
+        if app.state.transit is not None:
+            await app.state.transit.aclose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -57,6 +67,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events_router.router)
     app.include_router(weather_router.router)
     app.include_router(settings_router.router)
+    app.include_router(transit_router.router)
+    app.include_router(system_router.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

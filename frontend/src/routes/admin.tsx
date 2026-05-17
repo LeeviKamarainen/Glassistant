@@ -615,6 +615,11 @@ function WidgetRow({
   const [col, setCol] = useState(widget.col);
   const [rowSpan, setRowSpan] = useState(widget.row_span);
   const [colSpan, setColSpan] = useState(widget.col_span);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configText, setConfigText] = useState(
+    () => JSON.stringify(widget.config, null, 2),
+  );
+  const [configError, setConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     setRow(widget.row);
@@ -623,51 +628,104 @@ function WidgetRow({
     setColSpan(widget.col_span);
   }, [widget.id, widget.row, widget.col, widget.row_span, widget.col_span]);
 
+  useEffect(() => {
+    setConfigText(JSON.stringify(widget.config, null, 2));
+    setConfigError(null);
+  }, [widget.config]);
+
   const dirty =
     row !== widget.row ||
     col !== widget.col ||
     rowSpan !== widget.row_span ||
     colSpan !== widget.col_span;
 
+  const saveConfig = async () => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(configText);
+    } catch {
+      setConfigError("Invalid JSON");
+      return;
+    }
+    setConfigError(null);
+    await onUpdate(widget.id, { config: parsed });
+  };
+
   return (
-    <li className="grid grid-cols-2 items-end gap-2 rounded-md border border-white/10 bg-white/5 p-3 sm:grid-cols-7">
-      <div className="sm:col-span-1">
-        <div className="text-xs uppercase tracking-wide text-fg-faint">
-          #{widget.id} · {widget.type}
+    <li className="rounded-md border border-white/10 bg-white/5">
+      <div className="grid grid-cols-2 items-end gap-2 p-3 sm:grid-cols-7">
+        <div className="sm:col-span-1">
+          <div className="text-xs uppercase tracking-wide text-fg-faint">
+            #{widget.id} · {widget.type}
+          </div>
+          <div className="text-sm text-fg-dim">
+            {widget.enabled ? "enabled" : "disabled"}
+          </div>
         </div>
-        <div className="text-sm text-fg-dim">
-          {widget.enabled ? "enabled" : "disabled"}
-        </div>
+        <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
+        <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
+        <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+        <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
+        <button
+          type="button"
+          disabled={disabled || !dirty}
+          onClick={() =>
+            onUpdate(widget.id, {
+              row,
+              col,
+              row_span: rowSpan,
+              col_span: colSpan,
+            })
+          }
+          className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            if (window.confirm(`Delete widget #${widget.id}?`)) onDelete(widget.id);
+          }}
+          className="rounded-md border border-red-500/40 text-red-200 px-3 py-1 text-sm hover:bg-red-500/10 disabled:opacity-30"
+        >
+          Delete
+        </button>
       </div>
-      <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
-      <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
-      <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
-      <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
-      <button
-        type="button"
-        disabled={disabled || !dirty}
-        onClick={() =>
-          onUpdate(widget.id, {
-            row,
-            col,
-            row_span: rowSpan,
-            col_span: colSpan,
-          })
-        }
-        className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
-      >
-        Save
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          if (window.confirm(`Delete widget #${widget.id}?`)) onDelete(widget.id);
-        }}
-        className="rounded-md border border-red-500/40 text-red-200 px-3 py-1 text-sm hover:bg-red-500/10 disabled:opacity-30"
-      >
-        Delete
-      </button>
+
+      {/* Config editor */}
+      <div className="border-t border-white/10">
+        <button
+          type="button"
+          onClick={() => setConfigOpen((o) => !o)}
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-fg-faint hover:text-fg-dim transition"
+        >
+          <span className={`transition-transform ${configOpen ? "rotate-90" : ""}`}>›</span>
+          Config JSON
+        </button>
+        {configOpen && (
+          <div className="px-3 pb-3 flex flex-col gap-2">
+            <textarea
+              value={configText}
+              onChange={(e) => { setConfigText(e.target.value); setConfigError(null); }}
+              rows={8}
+              spellCheck={false}
+              className="w-full rounded-md border border-white/10 bg-black px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-white/40 resize-y"
+            />
+            {configError && (
+              <div className="text-xs text-red-300">{configError}</div>
+            )}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={saveConfig}
+              className="self-start rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
+            >
+              Save config
+            </button>
+          </div>
+        )}
+      </div>
     </li>
   );
 }

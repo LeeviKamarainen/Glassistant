@@ -23,6 +23,14 @@ class Settings(BaseSettings):
 
     weather_cache_ttl_seconds: int = 600
 
+    # HSL Digitransit routing API key. Leave empty to disable the transit proxy.
+    digitransit_api_key: str = ""
+
+    # Home coordinates, used by the transit widget as the default "Home" origin.
+    # Set in .env so they are never committed to git.
+    home_lat: float = 0.0
+    home_lon: float = 0.0
+
 
 def get_settings() -> Settings:
     return Settings()
