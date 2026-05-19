@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { WIDGET_REGISTRY, WIDGET_TYPES } from "./widgets/registry";
 import type { Widget, WidgetUpdate } from "../lib/types";
 
 interface AdminGridProps {
@@ -8,6 +9,7 @@ interface AdminGridProps {
   gridCols: number;
   onUpdate: (id: number, patch: WidgetUpdate) => Promise<unknown>;
   onDelete: (id: number) => Promise<unknown>;
+  onAdd: (type: string, row: number, col: number, rowSpan: number, colSpan: number) => Promise<unknown>;
   busy: boolean;
 }
 
@@ -17,16 +19,46 @@ export function AdminGrid({
   gridCols,
   onUpdate,
   onDelete,
+  onAdd,
   busy,
 }: AdminGridProps) {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
+  const [pendingCell, setPendingCell] = useState<{ row: number; col: number } | null>(null);
+  const [pendingType, setPendingType] = useState<string>(WIDGET_TYPES[0] ?? "clock");
   const gridRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside of it
+  useEffect(() => {
+    if (!pendingCell) return;
+    function onOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setPendingCell(null);
+      }
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [pendingCell]);
 
   const draggingWidget = useMemo(
     () => (draggingId !== null ? (widgets.find((w) => w.id === draggingId) ?? null) : null),
     [draggingId, widgets],
   );
+
+  // All occupied cells (used to identify empty cells for click-to-add)
+  const allOccupied = useMemo(() => {
+    const set = new Set<string>();
+    for (const w of widgets) {
+      if (!w.enabled) continue;
+      for (let r = w.row; r < w.row + w.row_span; r++) {
+        for (let c = w.col; c < w.col + w.col_span; c++) {
+          set.add(`${r},${c}`);
+        }
+      }
+    }
+    return set;
+  }, [widgets]);
 
   // Cells occupied by widgets other than the one being dragged
   const occupiedByOthers = useMemo(() => {
@@ -88,10 +120,25 @@ export function AdminGrid({
     setHoverCell(null);
   }
 
+  // Compute dropdown position relative to the outer wrapper.
+  // Flip to above/right when the cell is in the bottom or right portion of the grid.
+  function getDropdownStyle(cell: { row: number; col: number }): React.CSSProperties {
+    const inBottomHalf = cell.row >= gridRows / 2;
+    const inRightPart = cell.col >= gridCols * 0.65;
+    return {
+      ...(inBottomHalf
+        ? { bottom: `${((gridRows - cell.row) / gridRows) * 100}%` }
+        : { top: `${((cell.row + 1) / gridRows) * 100}%` }),
+      ...(inRightPart
+        ? { right: `${((gridCols - cell.col - 1) / gridCols) * 100}%` }
+        : { left: `${(cell.col / gridCols) * 100}%` }),
+    };
+  }
+
   const dropOk = hoverCell ? canDropAt(hoverCell.row, hoverCell.col) : false;
 
   return (
-    <div style={{ margin: "0 auto", width: "fit-content", maxWidth: "100%" }}>
+    <div className="relative" style={{ margin: "0 auto", width: "fit-content", maxWidth: "100%" }}>
       <div
         ref={gridRef}
         className="relative select-none rounded-lg border border-white/10 overflow-hidden"
@@ -122,17 +169,35 @@ export function AdminGrid({
               row < hoverCell.row + draggingWidget.row_span &&
               col >= hoverCell.col &&
               col < hoverCell.col + draggingWidget.col_span;
+            const isEmpty = !allOccupied.has(`${row},${col}`);
+            const isSelected = pendingCell?.row === row && pendingCell?.col === col;
             return (
               <div
                 key={i}
-                className={`border border-white/[0.06] transition-colors ${
+                className={`group border border-white/[0.06] transition-colors ${
                   inZone
                     ? dropOk
                       ? "bg-white/15 border-white/30"
                       : "bg-red-500/20 border-red-400/30"
-                    : ""
+                    : isSelected
+                      ? "bg-white/10 border-white/25"
+                      : isEmpty && !draggingId
+                        ? "cursor-pointer hover:bg-white/[0.06]"
+                        : ""
                 }`}
-              />
+                onClick={() => {
+                  if (isEmpty && !draggingId && !busy) {
+                    setPendingCell({ row, col });
+                    setPendingType(WIDGET_TYPES[0] ?? "clock");
+                  }
+                }}
+              >
+                {isEmpty && !draggingId && (
+                  <span className="flex h-full w-full items-center justify-center text-base text-white/0 group-hover:text-white/20 transition-colors select-none">
+                    +
+                  </span>
+                )}
+              </div>
             );
           })}
         </div>
@@ -195,8 +260,60 @@ export function AdminGrid({
             ))}
         </div>
       </div>
+
+      {/* Add-widget dropdown — sibling of the grid so it escapes overflow-hidden */}
+      {pendingCell && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-50 rounded-lg border border-white/20 bg-[#111] p-3 shadow-2xl"
+          style={{ width: "172px", ...getDropdownStyle(pendingCell) }}
+        >
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-fg-faint">
+            r{pendingCell.row} · c{pendingCell.col}
+          </p>
+          <select
+            value={pendingType}
+            onChange={(e) => setPendingType(e.target.value)}
+            className="mb-2 w-full rounded border border-white/10 bg-black px-2 py-1 text-sm text-fg outline-none focus:border-white/30"
+          >
+            {WIDGET_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {WIDGET_REGISTRY[t]!.label}
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                const meta = WIDGET_REGISTRY[pendingType]!;
+                await onAdd(
+                  pendingType,
+                  pendingCell.row,
+                  pendingCell.col,
+                  meta.defaultSize.rowSpan,
+                  meta.defaultSize.colSpan,
+                );
+                setPendingCell(null);
+              }}
+              className="flex-1 rounded bg-white px-2 py-1 text-xs font-medium text-black hover:bg-white/90 disabled:opacity-50"
+            >
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingCell(null)}
+              className="rounded border border-white/20 px-2 py-1 text-xs text-fg-dim hover:bg-white/5"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="mt-1.5 text-center text-[10px] text-fg-faint">
-        Drag to reposition · {gridRows}r × {gridCols}c
+        Drag to reposition · click empty cell to add · {gridRows}r × {gridCols}c
       </p>
     </div>
   );

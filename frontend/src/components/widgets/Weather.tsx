@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { usePreview } from "../../lib/previewContext";
 import { api } from "../../lib/api";
 import type { WeatherPayload } from "../../lib/types";
 import type { WidgetProps } from "./registry";
@@ -8,6 +9,17 @@ import {
   codeToCondition,
   conditionLabel,
 } from "./weather/icons";
+
+const MOCK_WEATHER: WeatherPayload = {
+  lat: 60.17,
+  lon: 24.94,
+  temperature_c: 14,
+  weather_code: 3,
+  wind_speed_kmh: 12,
+  humidity_pct: 68,
+  fetched_at: 0,
+  forecast: [],
+};
 
 const REFRESH_MS = 10 * 60 * 1000; // 10 min; matches backend TTL
 
@@ -20,14 +32,16 @@ interface WeatherConfig {
 }
 
 export function Weather({ widget }: WidgetProps) {
+  const preview = usePreview();
   const config = (widget.config as WeatherConfig | undefined) ?? {};
   const lat = config.lat ?? DEFAULT_LAT;
   const lon = config.lon ?? DEFAULT_LON;
 
-  const [data, setData] = useState<WeatherPayload | null>(null);
+  const [data, setData] = useState<WeatherPayload | null>(preview ? MOCK_WEATHER : null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     let activeController: AbortController | null = null;
 
@@ -58,7 +72,7 @@ export function Weather({ widget }: WidgetProps) {
       clearInterval(id);
       activeController?.abort();
     };
-  }, [lat, lon]);
+  }, [lat, lon, preview]);
 
   if (error) {
     return <div className="text-red-300/80 text-sm">weather: {error}</div>;

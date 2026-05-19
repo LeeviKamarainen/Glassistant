@@ -13,12 +13,17 @@ from app.config import Settings, get_settings
 from app.db import _open, run_migrations
 from app.events import Broadcaster
 from app.repositories import widgets as widgets_repo
+from app.routers import calendar as calendar_router
 from app.routers import events as events_router
 from app.routers import layout as layout_router
 from app.routers import settings as settings_router
+from app.routers import spotify as spotify_router
 from app.routers import system as system_router
+from app.routers import todos as todos_router
 from app.routers import transit as transit_router
 from app.routers import weather as weather_router
+from app.services.calendar import CalendarService
+from app.services.spotify import SpotifyService
 from app.services.transit import TransitService
 from app.services.weather import WeatherService
 
@@ -42,12 +47,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings.digitransit_api_key
         else None
     )
+    calendar = CalendarService(
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        redirect_uri=settings.google_redirect_uri,
+    )
+    token_conn = _open(settings.db_path)
+    try:
+        calendar.load_tokens(token_conn)
+    finally:
+        token_conn.close()
+    app.state.calendar = calendar
+
+    spotify = SpotifyService(
+        client_id=settings.spotify_client_id,
+        client_secret=settings.spotify_client_secret,
+        redirect_uri=settings.spotify_redirect_uri,
+    )
+    spotify_conn = _open(settings.db_path)
+    try:
+        spotify.load_tokens(spotify_conn)
+    finally:
+        spotify_conn.close()
+    app.state.spotify = spotify
+
     try:
         yield
     finally:
         await app.state.weather.aclose()
         if app.state.transit is not None:
             await app.state.transit.aclose()
+        await app.state.calendar.aclose()
+        await app.state.spotify.aclose()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -67,8 +98,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(events_router.router)
     app.include_router(weather_router.router)
     app.include_router(settings_router.router)
+    app.include_router(todos_router.router)
     app.include_router(transit_router.router)
     app.include_router(system_router.router)
+    app.include_router(calendar_router.router)
+    app.include_router(spotify_router.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

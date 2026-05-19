@@ -37,6 +37,7 @@ function Cell({ widget }: { widget: Widget }) {
   return (
     <div
       style={style}
+      data-widget-cell="true"
       className="flex items-center justify-center overflow-hidden rounded-lg"
     >
       {Component ? (

@@ -48,7 +48,7 @@ def run_migrations(db_path: Path) -> list[str]:
         for sql_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
             if sql_file.name in done:
                 continue
-            conn.executescript("BEGIN;\n" + sql_file.read_text(encoding="utf-8") + "\nCOMMIT;")
+            conn.executescript(sql_file.read_text(encoding="utf-8"))
             conn.execute(
                 "INSERT OR IGNORE INTO schema_migrations(name) VALUES (?)", (sql_file.name,)
             )

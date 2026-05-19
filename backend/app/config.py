@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     home_lat: float = 0.0
     home_lon: float = 0.0
 
+    # Google Calendar OAuth 2.0 credentials. Register at https://console.cloud.google.com
+    # and create an OAuth 2.0 web application credential.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/calendar/callback"
+
+    # Spotify OAuth 2.0 credentials. Register at https://developer.spotify.com/dashboard
+    # and add http://127.0.0.1:8000/api/spotify/callback as a Redirect URI.
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
+
 
 def get_settings() -> Settings:
     return Settings()

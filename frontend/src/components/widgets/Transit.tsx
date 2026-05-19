@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { usePreview } from "../../lib/previewContext";
 import { api } from "../../lib/api";
 import type { SystemConfig, TransitItinerary } from "../../lib/types";
 import type { WidgetProps } from "./registry";
@@ -155,30 +156,73 @@ interface RouteState {
   loading: boolean;
 }
 
+// ── mock data ─────────────────────────────────────────────────────────────────
+
+const MOCK_PREVIEW_ROUTES: RouteConfig[] = [
+  {
+    label: "Home → City Centre",
+    from: { lat: 60.25, lon: 24.85, label: "Home" },
+    to: { lat: 60.17, lon: 24.94, label: "Helsinki Central" },
+  },
+];
+
+function makeMockStates(): RouteState[] {
+  const now = Date.now();
+  const dep = (ms: number) => new Date(now + ms).toISOString();
+  return [
+    {
+      error: null,
+      loading: false,
+      itineraries: [
+        {
+          departure: dep(5 * 60000),
+          arrival: dep(28 * 60000),
+          duration_seconds: 23 * 60,
+          legs: [{ mode: "RAIL", route_short_name: "I", from_name: "Home", to_name: "Helsinki C", start_time: dep(5 * 60000), end_time: dep(28 * 60000), headsign: "Helsinki" }],
+        },
+        {
+          departure: dep(17 * 60000),
+          arrival: dep(40 * 60000),
+          duration_seconds: 23 * 60,
+          legs: [{ mode: "RAIL", route_short_name: "I", from_name: "Home", to_name: "Helsinki C", start_time: dep(17 * 60000), end_time: dep(40 * 60000), headsign: "Helsinki" }],
+        },
+      ],
+    },
+  ];
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export function Transit({ widget }: WidgetProps) {
+  const preview = usePreview();
   const config = (widget.config as TransitConfig | undefined) ?? {};
-  const routes: RouteConfig[] = config.routes ?? [];
+  const routes: RouteConfig[] = preview ? MOCK_PREVIEW_ROUTES : (config.routes ?? []);
   const numDepartures = config.numDepartures ?? 2;
 
   const [sys, setSys] = useState<SystemConfig | null>(null);
   const [routeStates, setRouteStates] = useState<RouteState[]>(() =>
-    routes.map(() => ({ itineraries: [], error: null, loading: true })),
+    preview ? makeMockStates() : routes.map(() => ({ itineraries: [], error: null, loading: true })),
   );
 
-  // Fetch system config once (for home coord resolution).
-  useEffect(() => {
-    api.getSystemConfig().then(setSys).catch(() => null);
-  }, []);
+  const loadAllRef = useRef<(() => void) | null>(null);
 
-  // Keep a stable ref to sys so the interval closure always sees the latest value.
+  // Fetch system config once. When it arrives, update the ref and re-trigger any
+  // route that uses source:"home" (which would have bailed on mount with sys=null).
   const sysRef = useRef(sys);
   useEffect(() => {
-    sysRef.current = sys;
-  }, [sys]);
+    if (preview) return;
+    api.getSystemConfig()
+      .then((data) => {
+        sysRef.current = data;
+        setSys(data);
+        const hasHome = routes.some((r) => "source" in r.from || "source" in r.to);
+        if (hasHome) loadAllRef.current?.();
+      })
+      .catch(() => null);
+  }, []);
 
   useEffect(() => {
+    if (preview) return;
     if (routes.length === 0) return;
 
     let cancelled = false;
@@ -242,6 +286,7 @@ export function Transit({ widget }: WidgetProps) {
     function loadAll() {
       routes.forEach((_, idx) => loadRoute(idx));
     }
+    loadAllRef.current = loadAll;
 
     loadAll();
     const id = setInterval(loadAll, REFRESH_MS);
@@ -251,7 +296,7 @@ export function Transit({ widget }: WidgetProps) {
       controllers.forEach((c) => c.abort());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routes.length, numDepartures, sys]);
+  }, [routes.length, numDepartures]);
 
   if (routes.length === 0) {
     return (

@@ -1,7 +1,10 @@
 import type {
+  CalendarWeekResponse,
   Layout,
   SettingsPayload,
+  SpotifyNowPlayingResponse,
   SystemConfig,
+  Todo,
   TransitPlanResponse,
   WeatherPayload,
   Widget,
@@ -58,6 +61,31 @@ export const api = {
       value,
     }),
   getSystemConfig: () => request<SystemConfig>("GET", "/api/system"),
+  getCalendarStatus: () =>
+    request<{ authorized: boolean; configured: boolean }>("GET", "/api/calendar/status"),
+  getCalendarAuth: () =>
+    request<{ auth_url: string }>("GET", "/api/calendar/auth"),
+  getCalendarEvents: (weekStart: string, signal?: AbortSignal) =>
+    request<CalendarWeekResponse>(
+      "GET",
+      `/api/calendar/events?week_start=${encodeURIComponent(weekStart)}`,
+      undefined,
+      signal,
+    ),
+  getTodos: (signal?: AbortSignal) =>
+    request<Todo[]>("GET", "/api/todos", undefined, signal),
+  createTodo: (body: { name: string; description?: string; due_date?: string; icon?: string }) =>
+    request<Todo>("POST", "/api/todos", body),
+  updateTodo: (id: number, body: { name?: string; description?: string; due_date?: string; icon?: string; done?: boolean }) =>
+    request<Todo>("PATCH", `/api/todos/${id}`, body),
+  deleteTodo: (id: number) =>
+    request<void>("DELETE", `/api/todos/${id}`),
+  getSpotifyStatus: () =>
+    request<{ authorized: boolean; configured: boolean }>("GET", "/api/spotify/status"),
+  getSpotifyAuth: () =>
+    request<{ auth_url: string }>("GET", "/api/spotify/auth"),
+  getSpotifyNowPlaying: (signal?: AbortSignal) =>
+    request<SpotifyNowPlayingResponse>("GET", "/api/spotify/now-playing", undefined, signal),
   planTransit: (
     origin: { lat: number; lon: number },
     destination: { lat: number; lon: number },

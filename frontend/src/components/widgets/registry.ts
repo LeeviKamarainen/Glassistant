@@ -1,9 +1,13 @@
 import type { FC } from "react";
 
 import type { Widget } from "../../lib/types";
+import { Calendar } from "./Calendar";
 import { Clock } from "./Clock";
+import { Countdown } from "./Countdown";
 import { DateW } from "./DateW";
 import { DateTime } from "./DateTime";
+import { Spotify } from "./Spotify";
+import { Todo } from "./Todo";
 import { Transit } from "./Transit";
 import { Weather } from "./Weather";
 import { WeatherForecast } from "./WeatherForecast";
@@ -54,6 +58,30 @@ export const WIDGET_REGISTRY: Record<string, WidgetMeta> = {
     component: Transit,
     label: "Transit",
     description: "Upcoming HSL departures for configured routes (train, bus, tram).",
+    defaultSize: { rowSpan: 1, colSpan: 2 },
+  },
+  calendar: {
+    component: Calendar,
+    label: "Calendar",
+    description: "Google Calendar — current week view with events per day.",
+    defaultSize: { rowSpan: 2, colSpan: 7 },
+  },
+  todo: {
+    component: Todo,
+    label: "Todo",
+    description: "Scrolling task list sorted by due date.",
+    defaultSize: { rowSpan: 2, colSpan: 1 },
+  },
+  countdown: {
+    component: Countdown,
+    label: "Countdown",
+    description: "Days (and optionally hours/minutes) until or since a target date.",
+    defaultSize: { rowSpan: 1, colSpan: 1 },
+  },
+  spotify: {
+    component: Spotify,
+    label: "Spotify",
+    description: "Currently playing track from Spotify — album art, title, artist, progress.",
     defaultSize: { rowSpan: 1, colSpan: 2 },
   },
 };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { Grid } from "../components/Grid";
 import { WeatherEffect } from "../components/WeatherEffect";
@@ -17,6 +17,8 @@ export default function Mirror() {
 
   const [layout, setLayout] = useState<Layout | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [widgetRects, setWidgetRects] = useState<DOMRect[]>([]);
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -44,6 +46,21 @@ export default function Mirror() {
     ),
   );
 
+  const measureWidgets = useCallback(() => {
+    if (!gridContainerRef.current) return;
+    const cells = gridContainerRef.current.querySelectorAll("[data-widget-cell]");
+    setWidgetRects(Array.from(cells).map((el) => el.getBoundingClientRect()));
+  }, []);
+
+  useLayoutEffect(() => {
+    measureWidgets();
+  }, [layout, measureWidgets]);
+
+  useEffect(() => {
+    window.addEventListener("resize", measureWidgets);
+    return () => window.removeEventListener("resize", measureWidgets);
+  }, [measureWidgets]);
+
   const ambient = useMemo(() => {
     const w = layout?.widgets.find((x) => x.type === "weather" && x.enabled);
     const cfg = w?.config as { lat?: number; lon?: number } | undefined;
@@ -57,9 +74,10 @@ export default function Mirror() {
         lon={ambient.lon}
         style={effectStyle.style}
         themeAccent={THEMES[theme.name].accent}
+        widgetRects={widgetRects}
       />
 
-      <div className="relative z-10 h-full w-full">
+      <div ref={gridContainerRef} className="relative z-10 h-full w-full">
         {error && (
           <div className="absolute top-2 left-2 text-red-300/70 text-xs">
             {error}

@@ -10,6 +10,8 @@ interface Props {
   condition: WeatherCondition;
   /** Hex color (e.g. "#fbbf24") used for sun rays / sparkles. */
   themeAccent: string;
+  /** Widget bounding rects; clouds animate to lower opacity when overlapping. */
+  widgetRects?: DOMRect[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -353,7 +355,7 @@ class Cloud implements Particle {
   layer = 0;
 
   constructor(scene: Scene) {
-    this.y = rand(scene.height * 0.05, scene.height * 0.55);
+    this.y = rand(scene.height * 0.32, scene.height * 0.86);
     const depth = Math.random();
     this.vx = 4 + depth * 8;
     this.width = 260 + depth * 220;
@@ -529,12 +531,72 @@ function createScene(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// SVG overlay helpers for partly-cloudy / cloudy (no canvas needed)
+
+// Cloud shape ported from icons.tsx. viewBox "0 0 48 28" with coords shifted
+// +23x +13y so the shape is fully within positive coordinate space.
+function CloudSvg() {
+  // All shapes are solid white so they merge into one unified silhouette.
+  // Overall transparency is controlled by the parent .fx-dyn-cloud-N opacity.
+  return (
+    <svg viewBox="0 0 48 28" width="100%" height="100%" fill="none" aria-hidden="true" style={{ display: "block" }}>
+      <ellipse cx={11} cy={17} rx={10} ry={7}  fill="white" />
+      <ellipse cx={25} cy={12} rx={14} ry={10} fill="white" />
+      <ellipse cx={37} cy={18} rx={9}  ry={7}  fill="white" />
+      <rect x={2} y={17} width={42} height={9} rx={4.5} fill="white" />
+    </svg>
+  );
+}
+
+// Sun icon: static rays that breathe via CSS, no continuous spin.
+function SunSvg() {
+  const cx = 40, cy = 40, rayStart = 22, rayEnd = 34, rayCount = 8;
+  return (
+    <svg viewBox="0 0 80 80" width="80" height="80" fill="none" aria-hidden="true" style={{ display: "block" }}>
+      <g className="fx-dyn-sun-rays">
+        {Array.from({ length: rayCount }).map((_, i) => {
+          const rad = (i * Math.PI * 2) / rayCount;
+          return (
+            <line
+              key={i}
+              x1={cx + Math.cos(rad) * rayStart} y1={cy + Math.sin(rad) * rayStart}
+              x2={cx + Math.cos(rad) * rayEnd}   y2={cy + Math.sin(rad) * rayEnd}
+              stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"
+            />
+          );
+        })}
+      </g>
+      <circle cx={cx} cy={cy} r={16} fill="currentColor" />
+    </svg>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cloud-widget overlap helpers
+
+// CSS opacity values that match the .fx-dyn-cloud-N classes.
+const CLOUD_BASE_OPACITIES = [0.80, 0.70, 0.75, 0.65] as const;
+
+// Fraction of the cloud's bounding rect that sits over the widget rect (0–1).
+function cloudOverlapRatio(cloud: DOMRect, widget: DOMRect): number {
+  const ix = Math.max(0, Math.min(cloud.right, widget.right) - Math.max(cloud.left, widget.left));
+  const iy = Math.max(0, Math.min(cloud.bottom, widget.bottom) - Math.max(cloud.top, widget.top));
+  const area = cloud.width * cloud.height;
+  return area > 0 ? Math.min(1, (ix * iy) / area) : 0;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // React component
 
-export default function WeatherEffectDynamic({ condition, themeAccent }: Props) {
+export default function WeatherEffectDynamic({ condition, themeAccent, widgetRects = [] }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cloud1Ref = useRef<HTMLDivElement>(null);
+  const cloud2Ref = useRef<HTMLDivElement>(null);
+  const cloud3Ref = useRef<HTMLDivElement>(null);
+  const cloud4Ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (condition === "partly-cloudy" || condition === "cloudy" || condition === "clear") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -588,6 +650,67 @@ export default function WeatherEffectDynamic({ condition, themeAccent }: Props) 
       ro.disconnect();
     };
   }, [condition, themeAccent]);
+
+  // Animate cloud opacity: fade out when overlapping a widget, fade back in when clear.
+  useEffect(() => {
+    if (condition !== "partly-cloudy" && condition !== "cloudy") return;
+    if (widgetRects.length === 0) return;
+
+    const cloudRefs = [cloud1Ref, cloud2Ref, cloud3Ref, cloud4Ref];
+    // Track current opacity per cloud so we can lerp smoothly.
+    const current = [...CLOUD_BASE_OPACITIES] as number[];
+    let raf: number;
+
+    function tick() {
+      for (let i = 0; i < cloudRefs.length; i++) {
+        const el = cloudRefs[i]!.current;
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        let maxOverlap = 0;
+        for (const wr of widgetRects) {
+          maxOverlap = Math.max(maxOverlap, cloudOverlapRatio(rect, wr));
+        }
+        const base = CLOUD_BASE_OPACITIES[i]!;
+        // At full overlap, reduce to ~10% of base opacity; interpolate in between.
+        const target = base * (1 - maxOverlap * 0.9);
+        current[i] = current[i]! + (target - current[i]!) * 0.07;
+        el.style.opacity = current[i]!.toFixed(3);
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const ref of cloudRefs) {
+        if (ref.current) ref.current.style.opacity = "";
+      }
+    };
+  }, [condition, widgetRects]);
+
+  if (condition === "clear" || condition === "partly-cloudy" || condition === "cloudy") {
+    return (
+      <div className="fx-overlay" aria-hidden="true">
+        {(condition === "clear" || condition === "partly-cloudy") && (
+          <div className="fx-dyn-sun" style={{ color: themeAccent }}>
+            <SunSvg />
+          </div>
+        )}
+        {condition !== "clear" && (
+          <>
+            <div ref={cloud1Ref} className="fx-dyn-cloud fx-dyn-cloud-1"><CloudSvg /></div>
+            <div ref={cloud2Ref} className="fx-dyn-cloud fx-dyn-cloud-2"><CloudSvg /></div>
+          </>
+        )}
+        {condition === "cloudy" && (
+          <>
+            <div ref={cloud3Ref} className="fx-dyn-cloud fx-dyn-cloud-3"><CloudSvg /></div>
+            <div ref={cloud4Ref} className="fx-dyn-cloud fx-dyn-cloud-4"><CloudSvg /></div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <canvas

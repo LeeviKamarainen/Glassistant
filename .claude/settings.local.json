@@ -6,7 +6,13 @@
       "Bash(Sort-Object FullName)",
       "WebFetch(domain:digitransit.fi)",
       "WebFetch(domain:api.digitransit.fi)",
-      "WebFetch(domain:docs.opentripplanner.org)"
+      "WebFetch(domain:docs.opentripplanner.org)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\backend\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\" -Recurse -Include \"*.tsx\", \"*.ts\")",
+      "Bash(Select-Object -First 50)",
+      "Bash(Format-Table FullName)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\\\\components\\\\widgets\" -Recurse)"
     ]
   }
 }

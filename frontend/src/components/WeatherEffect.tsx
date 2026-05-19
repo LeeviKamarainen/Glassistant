@@ -25,6 +25,8 @@ interface Props {
   style?: EffectStyle;
   /** Accent color (hex like "#fbbf24") used by sun-ray / sparkle effects. */
   themeAccent?: string;
+  /** Widget bounding rects used to fade clouds when they overlap. */
+  widgetRects?: DOMRect[];
 }
 
 export function WeatherEffect({
@@ -33,6 +35,7 @@ export function WeatherEffect({
   forceCondition,
   style = "calm",
   themeAccent = "#fbbf24",
+  widgetRects = [],
 }: Props) {
   const [condition, setCondition] = useState<WeatherCondition | null>(null);
 
@@ -61,7 +64,7 @@ export function WeatherEffect({
   if (style === "dynamic") {
     return (
       <Suspense fallback={null}>
-        <WeatherEffectDynamic condition={active} themeAccent={themeAccent} />
+        <WeatherEffectDynamic condition={active} themeAccent={themeAccent} widgetRects={widgetRects} />
       </Suspense>
     );
   }

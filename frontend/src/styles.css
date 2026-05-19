@@ -102,6 +102,9 @@ body {
   50%      { opacity: 0.85; }
 }
 
+.todo-scroll { scrollbar-width: none; }
+.todo-scroll::-webkit-scrollbar { display: none; }
+
 .fx-overlay { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
 .fx-drop    { position: absolute; top: 0; width: 1px; height: 14px; background: rgba(255, 255, 255, 0.45); animation: fx-fall linear infinite; }
 .fx-flake   { position: absolute; top: 0; color: rgba(255, 255, 255, 0.78); animation: fx-snowfall linear infinite; will-change: transform; }
@@ -177,14 +180,14 @@ body {
   animation: fx-clear-pulse 9s ease-in-out infinite;
 }
 
-/* Cloudy: slow-drifting soft cloud blobs near the top of the screen. */
+/* Cloudy: slow-drifting soft cloud blobs in the lower half of the screen. */
 .fx-cloud-blob {
   position: absolute;
   width: 70vw; height: 40vh;
   will-change: transform;
 }
 .fx-cloud-blob-1 {
-  top: -6vh;
+  top: 30vh;
   background: radial-gradient(ellipse at center,
     rgba(205, 210, 220, 0.26) 0%,
     rgba(205, 210, 220, 0.12) 38%,
@@ -193,7 +196,7 @@ body {
   animation-delay: -10s;
 }
 .fx-cloud-blob-2 {
-  top: 12vh;
+  top: 52vh;
   background: radial-gradient(ellipse at center,
     rgba(205, 210, 220, 0.22) 0%,
     rgba(205, 210, 220, 0.09) 40%,
@@ -202,11 +205,96 @@ body {
   animation-delay: -55s;
 }
 .fx-cloud-blob-3 {
-  top: 4vh;
+  top: 40vh;
   background: radial-gradient(ellipse at center,
     rgba(205, 210, 220, 0.20) 0%,
     rgba(205, 210, 220, 0.08) 40%,
     transparent 72%);
   animation: fx-fog-drift 95s linear infinite;
   animation-delay: -75s;
+}
+
+/* ── Dynamic SVG clouds + sun corner (partly-cloudy, cloudy) ────────────────
+   Clouds are crisp SVG icons that scroll continuously across the screen at
+   different speeds and directions. The sun sits in the top-right corner and
+   gently twinkles — no giant rotating rays. */
+
+@keyframes fx-cloud-scroll-ltr {
+  from { transform: translateX(-140%); }
+  to   { transform: translateX(120vw); }
+}
+
+@keyframes fx-cloud-scroll-rtl {
+  from { transform: translateX(120vw); }
+  to   { transform: translateX(-140%); }
+}
+
+
+@keyframes fx-sun-twinkle {
+  0%, 100% { opacity: 0.75; transform: scale(1);    }
+  40%      { opacity: 0.95; transform: scale(1.06); }
+  70%      { opacity: 0.80; transform: scale(0.97); }
+}
+
+@keyframes fx-ray-breathe {
+  0%, 100% { opacity: 0.30; }
+  50%      { opacity: 0.55; }
+}
+
+.fx-dyn-cloud {
+  position: absolute;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.fx-dyn-cloud-1 {
+  top: 32vh;
+  width: 340px;
+  height: calc(340px * (28 / 48));
+  opacity: 0.80;
+  animation: fx-cloud-scroll-ltr 55s linear infinite;
+  animation-delay: -8s;
+}
+
+.fx-dyn-cloud-2 {
+  top: 62vh;
+  width: 260px;
+  height: calc(260px * (28 / 48));
+  opacity: 0.70;
+  animation: fx-cloud-scroll-rtl 42s linear infinite;
+  animation-delay: -20s;
+}
+
+.fx-dyn-cloud-3 {
+  top: 46vh;
+  width: 300px;
+  height: calc(300px * (28 / 48));
+  opacity: 0.75;
+  animation: fx-cloud-scroll-ltr 48s linear infinite;
+  animation-delay: -35s;
+}
+
+.fx-dyn-cloud-4 {
+  top: 74vh;
+  width: 220px;
+  height: calc(220px * (28 / 48));
+  opacity: 0.65;
+  animation: fx-cloud-scroll-rtl 62s linear infinite;
+  animation-delay: -50s;
+}
+
+.fx-dyn-sun {
+  position: absolute;
+  top: 28px;
+  right: 28px;
+  width: 80px;
+  height: 80px;
+  pointer-events: none;
+  transform-origin: center;
+  animation: fx-sun-twinkle 6s ease-in-out infinite;
+}
+
+.fx-dyn-sun-rays {
+  transform-origin: 40px 40px;
+  animation: fx-ray-breathe 5s ease-in-out infinite;
 }

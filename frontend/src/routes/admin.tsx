@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { PreviewContext } from "../lib/previewContext";
 import { AdminGrid } from "../components/AdminGrid";
 import { WeatherEffect } from "../components/WeatherEffect";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
@@ -150,6 +151,9 @@ export default function Admin() {
           </div>
         </section>
 
+        {/* Google Calendar */}
+        <CalendarAuthSection />
+
         {/* Grid configuration */}
         <section className="mb-8">
           <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Grid size</h2>
@@ -241,6 +245,9 @@ export default function Admin() {
                   gridCols={gridConfig.cols}
                   onUpdate={onUpdate}
                   onDelete={onDelete}
+                  onAdd={(type, row, col, rowSpan, colSpan) =>
+                    run(() => api.createWidget({ type, row, col, row_span: rowSpan, col_span: colSpan }))
+                  }
                   busy={busy}
                 />
               </section>
@@ -389,13 +396,6 @@ function ComponentCard({
   const [rowSpan, setRowSpan] = useState(meta.defaultSize.rowSpan);
   const [colSpan, setColSpan] = useState(meta.defaultSize.colSpan);
 
-  useEffect(() => {
-    if (expanded) {
-      setRowSpan(meta.defaultSize.rowSpan);
-      setColSpan(meta.defaultSize.colSpan);
-    }
-  }, [expanded, meta.defaultSize.rowSpan, meta.defaultSize.colSpan]);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onAdd({ type: typeKey, row, col, row_span: rowSpan, col_span: colSpan });
@@ -407,8 +407,8 @@ function ComponentCard({
     type: typeKey,
     row: 0,
     col: 0,
-    row_span: meta.defaultSize.rowSpan,
-    col_span: meta.defaultSize.colSpan,
+    row_span: rowSpan,
+    col_span: colSpan,
     config: {},
     enabled: true,
     z_order: 0,
@@ -416,7 +416,7 @@ function ComponentCard({
     updated_at: "",
   };
 
-  const previewHeight = meta.defaultSize.rowSpan * 180;
+  const previewHeight = rowSpan * 180;
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 overflow-hidden">
@@ -424,7 +424,9 @@ function ComponentCard({
         className="flex items-center justify-center w-full overflow-hidden bg-black/60 p-8"
         style={{ minHeight: previewHeight }}
       >
-        <Component widget={mockWidget} />
+        <PreviewContext.Provider value={true}>
+          <Component widget={mockWidget} />
+        </PreviewContext.Provider>
       </div>
 
       <div className="p-3 border-t border-white/10">
@@ -432,9 +434,7 @@ function ComponentCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-medium text-fg">{meta.label}</span>
-              <span className="text-[10px] uppercase tracking-widest text-fg-dim">
-                {typeKey} · {meta.defaultSize.rowSpan}×{meta.defaultSize.colSpan}
-              </span>
+              <span className="text-[10px] uppercase tracking-widest text-fg-dim">{typeKey}</span>
             </div>
             <div className="mt-0.5 text-xs text-fg-faint leading-relaxed">
               {meta.description}
@@ -454,21 +454,35 @@ function ComponentCard({
           </button>
         </div>
 
+        {/* Size controls — always visible, drive the preview above */}
+        <div className="mt-3 flex items-end gap-2 border-t border-white/10 pt-3">
+          <NumberInput label="Rows" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+          <span className="pb-1.5 text-xs text-fg-faint">×</span>
+          <NumberInput label="Cols" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
+          {(rowSpan !== meta.defaultSize.rowSpan || colSpan !== meta.defaultSize.colSpan) && (
+            <button
+              type="button"
+              onClick={() => { setRowSpan(meta.defaultSize.rowSpan); setColSpan(meta.defaultSize.colSpan); }}
+              className="pb-1 text-xs text-fg-faint hover:text-fg-dim transition"
+            >
+              reset
+            </button>
+          )}
+        </div>
+
         {expanded && (
           <form
             onSubmit={submit}
-            className="mt-3 grid grid-cols-4 gap-2 border-t border-white/10 pt-3"
+            className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3"
           >
             <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
             <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
-            <NumberInput label="R-span" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
-            <NumberInput label="C-span" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
             <button
               type="submit"
               disabled={disabled}
-              className="col-span-4 mt-1 rounded-md bg-white text-black px-3 py-1.5 text-sm font-medium hover:bg-white/90 disabled:opacity-50"
+              className="col-span-2 mt-1 rounded-md bg-white text-black px-3 py-1.5 text-sm font-medium hover:bg-white/90 disabled:opacity-50"
             >
-              Add to layout
+              Add to layout ({rowSpan}×{colSpan})
             </button>
           </form>
         )}
@@ -544,6 +558,87 @@ function ThemeSwatch({
         <span className="text-[10px] uppercase tracking-widest text-fg-faint">{name}</span>
       </span>
     </button>
+  );
+}
+
+function CalendarAuthSection() {
+  const [status, setStatus] = useState<{ authorized: boolean; configured: boolean } | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [busy, setCalBusy] = useState(false);
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const s = await api.getCalendarStatus();
+      setStatus(s);
+    } catch {
+      // calendar endpoint unavailable — ignore silently
+    }
+  }, []);
+
+  useEffect(() => {
+    checkStatus();
+    // Re-check when user returns from the auth tab
+    const onFocus = () => checkStatus();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("message", (e) => {
+      if (e.data === "calendar_auth_success") checkStatus();
+    });
+    return () => window.removeEventListener("focus", onFocus);
+  }, [checkStatus]);
+
+  const handleAuthorize = async () => {
+    setCalBusy(true);
+    setAuthError(null);
+    try {
+      const { auth_url } = await api.getCalendarAuth();
+      window.open(auth_url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCalBusy(false);
+    }
+  };
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Google Calendar</h2>
+      {status === null ? (
+        <div className="text-xs text-fg-faint">Checking…</div>
+      ) : !status.configured ? (
+        <div className="text-xs text-fg-faint">
+          Not configured — set <code className="rounded bg-white/10 px-1">GLASSISTANT_GOOGLE_CLIENT_ID</code> and{" "}
+          <code className="rounded bg-white/10 px-1">GLASSISTANT_GOOGLE_CLIENT_SECRET</code> in <code className="rounded bg-white/10 px-1">.env</code> and restart.
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1.5 text-sm">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ background: status.authorized ? "var(--theme-accent)" : "#ef4444" }}
+            />
+            <span className="text-fg-dim">
+              {status.authorized ? "Connected" : "Not connected"}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleAuthorize}
+            disabled={busy}
+            className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-50"
+          >
+            {status.authorized ? "Re-authorize" : "Authorize Google Calendar"}
+          </button>
+        </div>
+      )}
+      {authError && (
+        <div className="mt-2 text-xs text-red-300">{authError}</div>
+      )}
+      {status?.authorized && (
+        <p className="mt-1.5 text-xs text-fg-faint">
+          After re-authorizing, return to this tab — status updates automatically.
+        </p>
+      )}
+    </section>
   );
 }
 
