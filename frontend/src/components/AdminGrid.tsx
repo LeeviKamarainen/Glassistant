@@ -28,8 +28,12 @@ export function AdminGrid({
   const [pendingType, setPendingType] = useState<string>(WIDGET_TYPES[0] ?? "clock");
   const gridRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLDivElement>(null);
+  const [selectedWidgetId, setSelectedWidgetId] = useState<number | null>(null);
+  const [editRowSpan, setEditRowSpan] = useState(1);
+  const [editColSpan, setEditColSpan] = useState(1);
 
-  // Close dropdown when clicking outside of it
+  // Close add-widget dropdown when clicking outside
   useEffect(() => {
     if (!pendingCell) return;
     function onOutside(e: MouseEvent) {
@@ -40,6 +44,25 @@ export function AdminGrid({
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
   }, [pendingCell]);
+
+  // Sync edit inputs when a widget is selected
+  useEffect(() => {
+    if (selectedWidgetId === null) return;
+    const w = widgets.find((x) => x.id === selectedWidgetId);
+    if (!w) { setSelectedWidgetId(null); return; }
+    setEditRowSpan(w.row_span);
+    setEditColSpan(w.col_span);
+  }, [selectedWidgetId, widgets]);
+
+  // Close edit panel when clicking outside
+  useEffect(() => {
+    if (selectedWidgetId === null) return;
+    function onOutside(e: MouseEvent) {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) setSelectedWidgetId(null);
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, [selectedWidgetId]);
 
   const draggingWidget = useMemo(
     () => (draggingId !== null ? (widgets.find((w) => w.id === draggingId) ?? null) : null),
@@ -189,6 +212,7 @@ export function AdminGrid({
                   if (isEmpty && !draggingId && !busy) {
                     setPendingCell({ row, col });
                     setPendingType(WIDGET_TYPES[0] ?? "clock");
+                    setSelectedWidgetId(null);
                   }
                 }}
               >
@@ -230,12 +254,20 @@ export function AdminGrid({
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = "move";
                     setDraggingId(widget.id);
+                    setSelectedWidgetId(null);
                   }}
                   onDragEnd={() => {
                     setDraggingId(null);
                     setHoverCell(null);
                   }}
-                  className="h-full w-full cursor-grab active:cursor-grabbing rounded border border-white/25 bg-white/10 backdrop-blur-sm p-1.5 flex flex-col gap-0.5 overflow-hidden"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedWidgetId(widget.id === selectedWidgetId ? null : widget.id);
+                    setPendingCell(null);
+                  }}
+                  className={`h-full w-full cursor-grab active:cursor-grabbing rounded border bg-white/10 backdrop-blur-sm p-1.5 flex flex-col gap-0.5 overflow-hidden transition-colors ${
+                    selectedWidgetId === widget.id ? "border-white/60" : "border-white/25"
+                  }`}
                 >
                   <span className="text-[11px] font-medium text-fg truncate leading-tight">
                     {widget.type}
@@ -312,9 +344,99 @@ export function AdminGrid({
         </div>
       )}
 
+      {/* Widget edit panel */}
+      {selectedWidgetId !== null && (() => {
+        const w = widgets.find((x) => x.id === selectedWidgetId);
+        if (!w) return null;
+        const dirty = editRowSpan !== w.row_span || editColSpan !== w.col_span;
+        return (
+          <div
+            ref={editRef}
+            className="absolute z-50 rounded-lg border border-white/20 bg-[#111] p-3 shadow-2xl"
+            style={{ width: "186px", ...getDropdownStyle({ row: w.row, col: w.col }) }}
+          >
+            <div className="mb-2.5 flex items-center justify-between">
+              <p className="text-[10px] uppercase tracking-wide text-fg-faint">
+                {w.type} #{w.id}
+              </p>
+              <button type="button" onClick={() => setSelectedWidgetId(null)} className="text-[10px] text-fg-faint hover:text-fg">✕</button>
+            </div>
+            <div className="flex gap-4 mb-3">
+              <SizeSpinner label="Width" value={editColSpan} onChange={setEditColSpan} min={1} max={gridCols} />
+              <SizeSpinner label="Height" value={editRowSpan} onChange={setEditRowSpan} min={1} max={gridRows} />
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                disabled={busy || !dirty}
+                onClick={async () => {
+                  await onUpdate(w.id, { row_span: editRowSpan, col_span: editColSpan });
+                  setSelectedWidgetId(null);
+                }}
+                className="flex-1 rounded bg-white px-2 py-1 text-xs font-medium text-black hover:bg-white/90 disabled:opacity-40"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Delete ${w.type} #${w.id}?`)) {
+                    void onDelete(w.id);
+                    setSelectedWidgetId(null);
+                  }
+                }}
+                className="rounded border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+              >
+                Del
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <p className="mt-1.5 text-center text-[10px] text-fg-faint">
-        Drag to reposition · click empty cell to add · {gridRows}r × {gridCols}c
+        Drag to reposition · click widget to edit · click empty cell to add · {gridRows}r × {gridCols}c
       </p>
+    </div>
+  );
+}
+
+function SizeSpinner({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  min: number;
+  max: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[10px] uppercase tracking-wide text-fg-faint">{label}</span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+          className="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-fg-dim hover:bg-white/10 disabled:opacity-30 text-sm leading-none"
+        >
+          −
+        </button>
+        <span className="w-5 text-center text-sm text-fg tabular-nums">{value}</span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+          className="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-fg-dim hover:bg-white/10 disabled:opacity-30 text-sm leading-none"
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

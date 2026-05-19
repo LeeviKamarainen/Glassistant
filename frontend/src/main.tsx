@@ -6,6 +6,7 @@ import "./styles.css";
 
 const Mirror = lazy(() => import("./routes/mirror"));
 const Admin = lazy(() => import("./routes/admin"));
+const Mobile = lazy(() => import("./routes/mobile"));
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Routes>
           <Route path="/mirror" element={<Mirror />} />
           <Route path="/admin/*" element={<Admin />} />
+          <Route path="/mobile" element={<Mobile />} />
           <Route path="/" element={<Navigate to="/mirror" replace />} />
           <Route path="*" element={<Navigate to="/mirror" replace />} />
         </Routes>
