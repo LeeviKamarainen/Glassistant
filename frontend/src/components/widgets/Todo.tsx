@@ -133,16 +133,6 @@ export function Todo({ widget }: WidgetProps) {
     };
   }, [todos]);
 
-  async function toggleDone(todo: TodoItem) {
-    if (preview) return;
-    try {
-      const updated = await api.updateTodo(todo.id, { done: !todo.done });
-      setTodos((prev) => prev ? prev.map((t) => (t.id === updated.id ? updated : t)) : prev);
-    } catch {
-      // ignore — SSE will sync if backend is reachable
-    }
-  }
-
   if (error) return <div className="text-red-300/80 text-sm">todos: {error}</div>;
   if (!todos) return <div className="text-fg-faint text-sm">loading…</div>;
 
@@ -204,15 +194,12 @@ export function Todo({ widget }: WidgetProps) {
                   )}
                 </div>
 
-                {/* Toggle button */}
-                <button
-                  onClick={() => void toggleDone(todo)}
-                  className="shrink-0 mt-0.5 text-fg-faint hover:text-accent transition-colors cursor-pointer"
+                <span
+                  className="shrink-0 mt-0.5 text-fg-faint"
                   style={{ fontSize: "clamp(0.75rem, 1.2vw, 1rem)" }}
-                  aria-label={todo.done ? "Mark undone" : "Mark done"}
                 >
                   {todo.done ? "✓" : "○"}
-                </button>
+                </span>
               </div>
             );
           })}

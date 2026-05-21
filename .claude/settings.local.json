@@ -12,7 +12,9 @@
       "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\" -Recurse -Include \"*.tsx\", \"*.ts\")",
       "Bash(Select-Object -First 50)",
       "Bash(Format-Table FullName)",
-      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\\\\components\\\\widgets\" -Recurse)"
+      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\\\\components\\\\widgets\" -Recurse)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\" -ErrorAction SilentlyContinue)",
+      "WebFetch(domain:docs.ollama.com)"
     ]
   }
 }

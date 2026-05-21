@@ -14,6 +14,7 @@ from app.db import _open, run_migrations
 from app.events import Broadcaster
 from app.repositories import widgets as widgets_repo
 from app.routers import calendar as calendar_router
+from app.routers import chat as chat_router
 from app.routers import events as events_router
 from app.routers import layout as layout_router
 from app.routers import settings as settings_router
@@ -23,6 +24,7 @@ from app.routers import todos as todos_router
 from app.routers import transit as transit_router
 from app.routers import weather as weather_router
 from app.services.calendar import CalendarService
+from app.services.ollama import OllamaService
 from app.services.spotify import SpotifyService
 from app.services.transit import TransitService
 from app.services.weather import WeatherService
@@ -41,6 +43,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         conn.close()
 
     app.state.broadcaster = Broadcaster()
+    app.state.ollama = OllamaService(
+        base_url=settings.ollama_base_url,
+        model=settings.ollama_model,
+    )
     app.state.weather = WeatherService(ttl_seconds=settings.weather_cache_ttl_seconds)
     app.state.transit = (
         TransitService(api_key=settings.digitransit_api_key)
@@ -74,6 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await app.state.ollama.aclose()
         await app.state.weather.aclose()
         if app.state.transit is not None:
             await app.state.transit.aclose()
@@ -95,6 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(layout_router.router)
+    app.include_router(chat_router.router)
     app.include_router(events_router.router)
     app.include_router(weather_router.router)
     app.include_router(settings_router.router)

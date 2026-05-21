@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { PreviewContext } from "../lib/previewContext";
 import { AdminGrid } from "../components/AdminGrid";
+import { ChatPanel } from "../components/ChatPanel";
 import { WeatherEffect } from "../components/WeatherEffect";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import type { WeatherCondition } from "../components/widgets/weather/icons";
@@ -301,6 +302,7 @@ export default function Admin() {
           Mirror view: <a className="underline" href="/mirror">/mirror</a>
         </footer>
       </div>
+      <ChatPanel />
     </div>
   );
 }

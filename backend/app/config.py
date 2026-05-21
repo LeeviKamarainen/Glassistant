@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = "http://127.0.0.1:8000/api/spotify/callback"
 
+    # Ollama AI agent. Point at a running Ollama instance and choose a tool-capable model.
+    # Models with tool support: llama3.1, llama3.2, qwen2.5, qwen2.5-coder, mistral-nemo, etc.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma4:26b"
+
 
 def get_settings() -> Settings:
     return Settings()

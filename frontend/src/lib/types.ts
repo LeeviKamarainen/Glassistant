@@ -129,3 +129,19 @@ export type SseEvent =
   | { type: "todos_changed"; payload: Record<string, never> }
   | { type: string; payload: unknown };
 
+// ── Chat / AI agent ──────────────────────────────────────────────────────────
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export type ChatEvent =
+  | { type: "text_delta"; content: string }
+  | { type: "tool_start"; tool: string; args: Record<string, unknown> }
+  | { type: "tool_result"; tool: string; result: string }
+  | { type: "done" }
+  | { type: "error"; message: string };
+

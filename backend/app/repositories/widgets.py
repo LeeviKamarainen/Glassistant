@@ -53,12 +53,26 @@ def get_grid_dims(conn: sqlite3.Connection) -> tuple[int, int]:
 def _check_bounds(
     row: int, col: int, row_span: int, col_span: int, grid_rows: int, grid_cols: int
 ) -> None:
-    if not (0 <= row < grid_rows and 0 <= col < grid_cols):
-        raise WidgetError("position out of bounds")
-    if row + row_span > grid_rows or col + col_span > grid_cols:
-        raise WidgetError("widget exceeds grid bounds")
     if row_span < 1 or col_span < 1:
         raise WidgetError("spans must be >= 1")
+    if not (0 <= row < grid_rows):
+        raise WidgetError(
+            f"row {row} out of bounds — grid has {grid_rows} rows (0–{grid_rows - 1})"
+        )
+    if not (0 <= col < grid_cols):
+        raise WidgetError(
+            f"col {col} out of bounds — grid has {grid_cols} cols (0–{grid_cols - 1})"
+        )
+    if row + row_span > grid_rows:
+        raise WidgetError(
+            f"widget at row={row} with row_span={row_span} exceeds grid bounds"
+            f" (last occupied row {row + row_span - 1}, grid ends at row {grid_rows - 1})"
+        )
+    if col + col_span > grid_cols:
+        raise WidgetError(
+            f"widget at col={col} with col_span={col_span} exceeds grid bounds"
+            f" (last occupied col {col + col_span - 1}, grid ends at col {grid_cols - 1})"
+        )
 
 
 def _check_no_overlap(
@@ -85,6 +99,17 @@ def list_widgets(conn: sqlite3.Connection) -> list[WidgetOut]:
         "SELECT * FROM widgets ORDER BY z_order ASC, id ASC"
     ).fetchall()
     return [_row_to_widget(r) for r in rows]
+
+
+def get_free_positions(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Return grid dimensions and all unoccupied cells (enabled widgets only)."""
+    grid_rows, grid_cols = get_grid_dims(conn)
+    occupied: set[tuple[int, int]] = set()
+    for w in list_widgets(conn):
+        if w.enabled:
+            occupied |= _cells(w.row, w.col, w.row_span, w.col_span)
+    free = [[r, c] for r in range(grid_rows) for c in range(grid_cols) if (r, c) not in occupied]
+    return {"grid_rows": grid_rows, "grid_cols": grid_cols, "free_cells": free}
 
 
 def get_widget(conn: sqlite3.Connection, widget_id: int) -> WidgetOut | None:
