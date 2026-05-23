@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PreviewContext } from "../lib/previewContext";
 import { AdminGrid } from "../components/AdminGrid";
 import { ChatPanel } from "../components/ChatPanel";
 import { WeatherEffect } from "../components/WeatherEffect";
+import { WidgetConfigEditor } from "../components/WidgetConfigEditor";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import type { WeatherCondition } from "../components/widgets/weather/icons";
 import { api } from "../lib/api";
@@ -14,7 +15,7 @@ import { useTheme } from "../lib/useTheme";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
 import { useGridConfig } from "../lib/useGridConfig";
-import type { Layout, SseEvent, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
+import type { Layout, SavedLayout, SseEvent, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
 
 type AdminTab = "layout" | "components";
 
@@ -189,6 +190,9 @@ export default function Admin() {
           </div>
         </section>
 
+        {/* Saved layouts */}
+        <SavedLayoutsSection busy={busy} onLayoutLoaded={refresh} />
+
         {/* Preview weather effect */}
         <section className="mb-8">
           <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">
@@ -304,6 +308,197 @@ export default function Admin() {
       </div>
       <ChatPanel />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Saved layouts
+// ---------------------------------------------------------------------------
+
+function SavedLayoutsSection({
+  busy,
+  onLayoutLoaded,
+}: {
+  busy: boolean;
+  onLayoutLoaded: () => void;
+}) {
+  const [layouts, setLayouts] = useState<SavedLayout[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [skippedWarning, setSkippedWarning] = useState<string[] | null>(null);
+  const [saveName, setSaveName] = useState("");
+  const [saveDesc, setSaveDesc] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const res = await api.getSavedLayouts();
+      setLayouts(res.layouts);
+    } catch {
+      /* silently ignore — we'll show nothing */
+    }
+  }, []);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = saveName.trim();
+    if (!name) return;
+    setLoading(true);
+    setSaveError(null);
+    try {
+      await api.saveLayout(name, saveDesc.trim());
+      setSaveName("");
+      setSaveDesc("");
+      await reload();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoad = async (id: number, layoutName: string) => {
+    if (!window.confirm(`Load layout "${layoutName}"? This replaces the current layout.`)) return;
+    setLoading(true);
+    setActionError(null);
+    setSkippedWarning(null);
+    try {
+      const result = await api.loadSavedLayout(id, WIDGET_TYPES);
+      if (result.skipped_types.length > 0) {
+        setSkippedWarning(result.skipped_types);
+      }
+      onLayoutLoaded();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: number, layoutName: string) => {
+    if (!window.confirm(`Delete saved layout "${layoutName}"?`)) return;
+    setLoading(true);
+    setActionError(null);
+    try {
+      await api.deleteSavedLayout(id);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Saved layouts</h2>
+
+      {/* Save current layout form */}
+      <form onSubmit={handleSave} className="mb-4 flex flex-wrap gap-2 items-end">
+        <label className="flex flex-col text-xs flex-1 min-w-[140px]">
+          <span className="mb-1 uppercase tracking-wide text-fg-faint">Name</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="e.g. Morning"
+            maxLength={64}
+            className="rounded-md border border-white/10 bg-black px-2 py-1 text-sm text-fg placeholder-fg-faint outline-none focus:border-white/40"
+          />
+        </label>
+        <label className="flex flex-col text-xs flex-1 min-w-[140px]">
+          <span className="mb-1 uppercase tracking-wide text-fg-faint">Description</span>
+          <input
+            type="text"
+            value={saveDesc}
+            onChange={(e) => setSaveDesc(e.target.value)}
+            placeholder="Optional"
+            maxLength={256}
+            className="rounded-md border border-white/10 bg-black px-2 py-1 text-sm text-fg placeholder-fg-faint outline-none focus:border-white/40"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy || loading || !saveName.trim()}
+          className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-40 self-end"
+        >
+          Save current
+        </button>
+      </form>
+
+      {saveError && (
+        <div className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-200">
+          {saveError}
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 p-2 text-xs text-red-200">
+          {actionError}
+        </div>
+      )}
+
+      {skippedWarning && (
+        <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-xs text-yellow-200 flex items-start gap-2">
+          <span>⚠ Skipped unknown widget type{skippedWarning.length > 1 ? "s" : ""}:</span>
+          <span className="font-mono">{skippedWarning.join(", ")}</span>
+          <button
+            type="button"
+            onClick={() => setSkippedWarning(null)}
+            className="ml-auto shrink-0 hover:text-yellow-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {layouts.length === 0 ? (
+        <div className="text-xs text-fg-faint">No saved layouts yet.</div>
+      ) : (
+        <ul className="space-y-2">
+          {layouts.map((layout) => (
+            <li
+              key={layout.id}
+              className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-fg truncate">{layout.name}</span>
+                  <span className="text-xs text-fg-faint shrink-0">
+                    {layout.widget_count} widget{layout.widget_count !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                {layout.description && (
+                  <div className="text-xs text-fg-faint truncate">{layout.description}</div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleLoad(layout.id, layout.name)}
+                disabled={busy || loading}
+                className="rounded-md border border-white/20 px-3 py-1 text-xs hover:bg-white/10 disabled:opacity-40 shrink-0"
+              >
+                Load
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(layout.id, layout.name)}
+                disabled={busy || loading}
+                className="rounded-md border border-red-500/30 px-3 py-1 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40 shrink-0"
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -712,11 +907,28 @@ function WidgetRow({
   const [col, setCol] = useState(widget.col);
   const [rowSpan, setRowSpan] = useState(widget.row_span);
   const [colSpan, setColSpan] = useState(widget.col_span);
+
+  // Config editor state
   const [configOpen, setConfigOpen] = useState(false);
+  const [configDraft, setConfigDraft] = useState<Record<string, unknown>>(
+    () => ({ ...(widget.config as Record<string, unknown>) }),
+  );
+  const [showRaw, setShowRaw] = useState(false);
   const [configText, setConfigText] = useState(
     () => JSON.stringify(widget.config, null, 2),
   );
   const [configError, setConfigError] = useState<string | null>(null);
+
+  const schema = WIDGET_REGISTRY[widget.type]?.configSchema;
+  const hasSchema = Boolean(schema && schema.length > 0);
+  const isScrollManaged = WIDGET_REGISTRY[widget.type]?.scrollManaged ?? false;
+  const autoScroll =
+    ((widget.config as Record<string, unknown> | null)?.auto_scroll as boolean | undefined) ?? false;
+
+  const handleAutoScrollToggle = async () => {
+    const base = (widget.config as Record<string, unknown>) ?? {};
+    await onUpdate(widget.id, { config: { ...base, auto_scroll: !autoScroll } });
+  };
 
   useEffect(() => {
     setRow(widget.row);
@@ -726,6 +938,8 @@ function WidgetRow({
   }, [widget.id, widget.row, widget.col, widget.row_span, widget.col_span]);
 
   useEffect(() => {
+    const draft = { ...(widget.config as Record<string, unknown>) };
+    setConfigDraft(draft);
     setConfigText(JSON.stringify(widget.config, null, 2));
     setConfigError(null);
   }, [widget.config]);
@@ -736,20 +950,46 @@ function WidgetRow({
     rowSpan !== widget.row_span ||
     colSpan !== widget.col_span;
 
-  const saveConfig = async () => {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(configText);
-    } catch {
-      setConfigError("Invalid JSON");
-      return;
+  const toggleRawJson = () => {
+    if (!showRaw) {
+      // Switching to raw: serialise current form draft
+      setConfigText(JSON.stringify(configDraft, null, 2));
+      setConfigError(null);
+      setShowRaw(true);
+    } else {
+      // Switching back to form: parse JSON first
+      try {
+        setConfigDraft(JSON.parse(configText));
+        setConfigError(null);
+        setShowRaw(false);
+      } catch {
+        setConfigError("Fix the JSON before switching back to the form.");
+      }
     }
-    setConfigError(null);
-    await onUpdate(widget.id, { config: parsed });
+  };
+
+  const saveConfig = async () => {
+    if (!hasSchema || showRaw) {
+      // Raw JSON path
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(configText);
+      } catch {
+        setConfigError("Invalid JSON");
+        return;
+      }
+      setConfigError(null);
+      await onUpdate(widget.id, { config: parsed });
+    } else {
+      // Form path
+      setConfigError(null);
+      await onUpdate(widget.id, { config: configDraft });
+    }
   };
 
   return (
     <li className="rounded-md border border-white/10 bg-white/5">
+      {/* Position / size controls */}
       <div className="grid grid-cols-2 items-end gap-2 p-3 sm:grid-cols-7">
         <div className="sm:col-span-1">
           <div className="text-xs uppercase tracking-wide text-fg-faint">
@@ -767,12 +1007,7 @@ function WidgetRow({
           type="button"
           disabled={disabled || !dirty}
           onClick={() =>
-            onUpdate(widget.id, {
-              row,
-              col,
-              row_span: rowSpan,
-              col_span: colSpan,
-            })
+            onUpdate(widget.id, { row, col, row_span: rowSpan, col_span: colSpan })
           }
           className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
         >
@@ -798,28 +1033,90 @@ function WidgetRow({
           className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-fg-faint hover:text-fg-dim transition"
         >
           <span className={`transition-transform ${configOpen ? "rotate-90" : ""}`}>›</span>
-          Config JSON
+          Configure
         </button>
+
         {configOpen && (
-          <div className="px-3 pb-3 flex flex-col gap-2">
-            <textarea
-              value={configText}
-              onChange={(e) => { setConfigText(e.target.value); setConfigError(null); }}
-              rows={8}
-              spellCheck={false}
-              className="w-full rounded-md border border-white/10 bg-black px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-white/40 resize-y"
-            />
+          <div className="px-3 pb-4 flex flex-col gap-4">
+            {/* Auto-scroll toggle — universal, saves immediately */}
+            {!isScrollManaged && (
+              <label className="flex cursor-pointer items-start gap-3">
+                <div className="relative mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={autoScroll}
+                    onChange={handleAutoScrollToggle}
+                    disabled={disabled}
+                    className="sr-only"
+                  />
+                  <div
+                    onClick={disabled ? undefined : handleAutoScrollToggle}
+                    className={`h-5 w-9 rounded-full transition-colors ${
+                      disabled ? "opacity-40 cursor-default" : "cursor-pointer"
+                    } ${autoScroll ? "bg-white/80" : "bg-white/20"}`}
+                  />
+                  <div
+                    className={`pointer-events-none absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-black transition-transform ${
+                      autoScroll ? "translate-x-4" : ""
+                    }`}
+                  />
+                </div>
+                <div>
+                  <div className="text-sm text-fg leading-snug">Auto-scroll</div>
+                  <div className="mt-0.5 text-xs text-fg-faint leading-relaxed">
+                    Slowly scroll through content that overflows the widget cell.
+                  </div>
+                </div>
+              </label>
+            )}
+
+            {/* Form editor (schema-driven) */}
+            {hasSchema && !showRaw && schema ? (
+              <WidgetConfigEditor
+                schema={schema}
+                config={configDraft}
+                onChange={setConfigDraft}
+              />
+            ) : (
+              /* Raw JSON fallback */
+              <textarea
+                value={configText}
+                onChange={(e) => {
+                  setConfigText(e.target.value);
+                  setConfigError(null);
+                }}
+                rows={8}
+                spellCheck={false}
+                className="w-full rounded-md border border-white/10 bg-black px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-white/40 resize-y"
+              />
+            )}
+
             {configError && (
               <div className="text-xs text-red-300">{configError}</div>
             )}
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={saveConfig}
-              className="self-start rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
-            >
-              Save config
-            </button>
+
+            {/* Action row */}
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={saveConfig}
+                className="rounded-md border border-white/20 px-3 py-1 text-sm hover:bg-white/10 disabled:opacity-30"
+              >
+                Save config
+              </button>
+
+              {/* Raw JSON toggle — only shown when there's a schema */}
+              {hasSchema && (
+                <button
+                  type="button"
+                  onClick={toggleRawJson}
+                  className="text-xs text-fg-faint hover:text-fg-dim transition-colors"
+                >
+                  {showRaw ? "← Back to form" : "Edit raw JSON →"}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -2,7 +2,11 @@ import type {
   CalendarWeekResponse,
   ChatEvent,
   ChatMessage,
+  FlightsPayload,
   Layout,
+  LoadLayoutResult,
+  SavedLayout,
+  SavedLayoutsResponse,
   SettingsPayload,
   SpotifyNowPlayingResponse,
   SystemConfig,
@@ -63,6 +67,13 @@ export const api = {
       value,
     }),
   getSystemConfig: () => request<SystemConfig>("GET", "/api/system"),
+  getFlights: (lat: number, lon: number, radiusKm?: number, signal?: AbortSignal) =>
+    request<FlightsPayload>(
+      "GET",
+      `/api/flights?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}${radiusKm != null ? `&radius_km=${encodeURIComponent(radiusKm)}` : ""}`,
+      undefined,
+      signal,
+    ),
   getCalendarStatus: () =>
     request<{ authorized: boolean; configured: boolean }>("GET", "/api/calendar/status"),
   getCalendarAuth: () =>
@@ -88,6 +99,16 @@ export const api = {
     request<{ auth_url: string }>("GET", "/api/spotify/auth"),
   getSpotifyNowPlaying: (signal?: AbortSignal) =>
     request<SpotifyNowPlayingResponse>("GET", "/api/spotify/now-playing", undefined, signal),
+  // Saved layouts
+  getSavedLayouts: () =>
+    request<SavedLayoutsResponse>("GET", "/api/saved-layouts"),
+  saveLayout: (name: string, description?: string) =>
+    request<SavedLayout>("POST", "/api/saved-layouts", { name, description: description ?? "" }),
+  loadSavedLayout: (id: number, knownTypes: string[]) =>
+    request<LoadLayoutResult>("POST", `/api/saved-layouts/${id}/load`, { known_types: knownTypes }),
+  deleteSavedLayout: (id: number) =>
+    request<void>("DELETE", `/api/saved-layouts/${id}`),
+
   planTransit: (
     origin: { lat: number; lon: number },
     destination: { lat: number; lon: number },

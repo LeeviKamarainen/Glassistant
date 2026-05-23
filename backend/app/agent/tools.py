@@ -6,6 +6,9 @@ dispatch()   — routes a tool call name + args to the right implementation.
 Mutating tools publish layout_changed SSE so the mirror updates live.
 On domain errors (WidgetError) we return the error string rather than raising —
 the agent sees it and can decide what to do (explain to user, retry with correction).
+
+Widget types are sourced from app.agent.widget_registry — add new entries there
+and the tool schema updates automatically with no changes needed here.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import json
 import sqlite3
 from typing import Any
 
+from app.agent.widget_registry import WIDGET_TYPES, widget_type_summary
 from app.events import Broadcaster
 from app.repositories import widgets as widgets_repo
 from app.repositories.widgets import WidgetError
@@ -45,14 +49,17 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "add_widget",
             "description": (
-                "Add a new widget to the grid. "
-                "Types: clock, date, datetime, weather, weather_forecast, "
-                "transit, calendar, todo, countdown, spotify."
+                "Add a new widget to the grid. Available types and their default spans:\n"
+                + widget_type_summary()
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "description": "Widget type key"},
+                    "type": {
+                        "type": "string",
+                        "description": "Widget type key",
+                        "enum": WIDGET_TYPES,
+                    },
                     "row": {"type": "integer", "description": "Starting row (0-indexed)"},
                     "col": {"type": "integer", "description": "Starting column (0-indexed)"},
                     "row_span": {"type": "integer", "description": "Rows to occupy (default 1)"},

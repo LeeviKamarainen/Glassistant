@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,14 +17,17 @@ from app.repositories import widgets as widgets_repo
 from app.routers import calendar as calendar_router
 from app.routers import chat as chat_router
 from app.routers import events as events_router
+from app.routers import flights as flights_router
 from app.routers import layout as layout_router
 from app.routers import settings as settings_router
 from app.routers import spotify as spotify_router
 from app.routers import system as system_router
 from app.routers import todos as todos_router
+from app.routers import saved_layouts as saved_layouts_router
 from app.routers import transit as transit_router
 from app.routers import weather as weather_router
 from app.services.calendar import CalendarService
+from app.services.flights import FlightsService
 from app.services.ollama import OllamaService
 from app.services.spotify import SpotifyService
 from app.services.transit import TransitService
@@ -48,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=settings.ollama_model,
     )
     app.state.weather = WeatherService(ttl_seconds=settings.weather_cache_ttl_seconds)
+    app.state.flights = FlightsService(ttl_seconds=settings.flights_cache_ttl_seconds)
     app.state.transit = (
         TransitService(api_key=settings.digitransit_api_key)
         if settings.digitransit_api_key
@@ -80,8 +85,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        # Tell SSE clients the server is going away so their generators exit
+        # cleanly before uvicorn's graceful-shutdown timer fires.
+        await app.state.broadcaster.publish("server_restarting", None)
+        await asyncio.sleep(0.1)  # let event queues drain to subscribers
         await app.state.ollama.aclose()
         await app.state.weather.aclose()
+        await app.state.flights.aclose()
         if app.state.transit is not None:
             await app.state.transit.aclose()
         await app.state.calendar.aclose()
@@ -103,6 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(layout_router.router)
     app.include_router(chat_router.router)
+    app.include_router(flights_router.router)
     app.include_router(events_router.router)
     app.include_router(weather_router.router)
     app.include_router(settings_router.router)
@@ -111,6 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(system_router.router)
     app.include_router(calendar_router.router)
     app.include_router(spotify_router.router)
+    app.include_router(saved_layouts_router.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

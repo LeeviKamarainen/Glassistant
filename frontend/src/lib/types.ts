@@ -123,6 +123,47 @@ export interface SpotifyNowPlayingResponse {
   authorized: boolean;
 }
 
+export interface Aircraft {
+  icao24: string;
+  callsign: string | null;
+  origin_country: string;
+  longitude: number | null;
+  latitude: number | null;
+  altitude_m: number | null;
+  on_ground: boolean;
+  velocity_ms: number | null;
+  heading_deg: number | null;
+  vertical_rate_ms: number | null;
+}
+
+export interface FlightsPayload {
+  aircraft: Aircraft[];
+  fetched_at: number;
+  lat: number;
+  lon: number;
+  radius_km: number;
+}
+
+// ── Saved layouts ─────────────────────────────────────────────────────────────
+
+export interface SavedLayout {
+  id: number;
+  name: string;
+  description: string;
+  widget_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedLayoutsResponse {
+  layouts: SavedLayout[];
+}
+
+export interface LoadLayoutResult {
+  widgets: Widget[];
+  skipped_types: string[];
+}
+
 export type SseEvent =
   | { type: "layout_changed"; payload: Layout }
   | { type: "settings_changed"; payload: SettingsPayload }

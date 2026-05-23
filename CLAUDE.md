@@ -138,10 +138,19 @@ Migrations live in `backend/migrations/` numbered `NNN_name.sql`. The migration 
 
 ## Widget system
 
-Adding a widget type requires:
-1. A new React component in `frontend/src/components/widgets/`
-2. An entry in `frontend/src/components/widgets/registry.ts`
-3. No backend changes unless the widget needs its own data endpoint
+### Adding a new widget type
+
+Every new widget requires exactly these steps — no exceptions:
+
+1. **React component** — create `frontend/src/components/widgets/YourWidget.tsx`
+2. **Frontend registry** — add an entry to `frontend/src/components/widgets/registry.ts` with `component`, `label`, `description`, and `defaultSize`
+3. **Backend registry** — add a matching entry to `backend/app/agent/widget_registry.py` with the same `label`, `description`, and default spans
+
+   This is what keeps the AI agent's tool prompt accurate. Skipping it means the agent won't know the widget exists.
+
+4. **Data endpoint** *(only if needed)* — add a router/service/repository under `backend/app/` if the widget fetches its own data
+
+The type key (the dict key in both registry files) must be identical between frontend and backend. The `GET /api/widget-types` endpoint always reflects the current backend registry and can be used to verify alignment.
 
 ## Themes
 

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     weather_cache_ttl_seconds: int = 600
 
+    # OpenSky Network cache TTL. Anonymous quota is ~400 req/day so keep this ≥15 s.
+    flights_cache_ttl_seconds: int = 60
+
     # HSL Digitransit routing API key. Leave empty to disable the transit proxy.
     digitransit_api_key: str = ""
 

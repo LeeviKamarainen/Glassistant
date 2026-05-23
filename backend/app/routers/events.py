@@ -34,6 +34,10 @@ async def stream_events(
                 except asyncio.TimeoutError:
                     yield b": heartbeat\n\n"
                     continue
+                # Sentinel published by the lifespan shutdown — close the
+                # generator so the connection ends before uvicorn force-kills it.
+                if event["type"] == "server_restarting":
+                    return
                 payload = json.dumps(event, default=str)
                 yield f"data: {payload}\n\n".encode("utf-8")
 

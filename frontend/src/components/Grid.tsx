@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import type { Widget } from "../lib/types";
-import { WIDGETS } from "./widgets/registry";
+import { AutoScroll } from "./AutoScroll";
+import { WIDGET_REGISTRY, WIDGETS } from "./widgets/registry";
 
 interface GridProps {
   widgets: Widget[];
@@ -30,6 +31,7 @@ export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridP
 
 function Cell({ widget }: { widget: Widget }) {
   const Component = WIDGETS[widget.type];
+  const meta = WIDGET_REGISTRY[widget.type];
   const style = {
     gridRow: `${widget.row + 1} / span ${widget.row_span}`,
     gridColumn: `${widget.col + 1} / span ${widget.col_span}`,
@@ -41,7 +43,15 @@ function Cell({ widget }: { widget: Widget }) {
       className="flex items-center justify-center overflow-hidden rounded-lg"
     >
       {Component ? (
-        <Component widget={widget} />
+        // scrollManaged widgets (e.g. Todo) handle scroll themselves.
+        // Everyone else: wrap in AutoScroll when the per-instance flag is set.
+        !meta?.scrollManaged && (widget.config as { auto_scroll?: boolean } | null)?.auto_scroll ? (
+          <AutoScroll>
+            <Component widget={widget} />
+          </AutoScroll>
+        ) : (
+          <Component widget={widget} />
+        )
       ) : (
         <UnknownWidget type={widget.type} />
       )}
