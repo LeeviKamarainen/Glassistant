@@ -1,9 +1,4 @@
-"""Ollama HTTP client — thin wrapper over /api/chat.
-
-Two methods:
-  chat()   — stream=false, supports tool schemas (required by Ollama for tool calling)
-  stream() — stream=true,  no tools; used for the final synthesis pass to save context
-"""
+"""Ollama HTTP client — thin wrapper over /api/chat."""
 from __future__ import annotations
 
 import json
@@ -22,30 +17,19 @@ class OllamaService:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def chat(
+    async def stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """Non-streaming call. Returns the full response dict."""
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": messages,
-            "stream": False,
-        }
-        if tools:
-            payload["tools"] = tools
-        resp = await self._client.post(f"{self._base_url}/api/chat", json=payload)
-        resp.raise_for_status()
-        return resp.json()
-
-    async def stream(self, messages: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
-        """Streaming call without tools — for the synthesis (final answer) pass."""
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Streaming call — works with or without tool schemas."""
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "stream": True,
         }
+        if tools:
+            payload["tools"] = tools
         async with self._client.stream(
             "POST", f"{self._base_url}/api/chat", json=payload
         ) as resp:

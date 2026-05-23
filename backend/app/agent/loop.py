@@ -1,7 +1,9 @@
-"""ReAct agent loop with two-phase context management.
+"""ReAct agent loop — fully streaming.
 
-Phase 1 — tool-use: non-streaming LLM calls with tool schemas, trimmed history.
-Phase 2 — synthesis: streaming LLM call WITHOUT tool schemas (saves ~800 tokens).
+Each iteration streams from Ollama with tool schemas, yielding text_delta events
+as tokens arrive. Tool calls are accumulated from the stream chunks and processed
+after the stream completes. If no tools were called, the streamed text IS the final
+response. A synthesis pass runs only if all MAX_ITERS were exhausted by tool calls.
 
 History is trimmed to MAX_HISTORY turns per call to keep context small for local models.
 Tool results are truncated at RESULT_LIMIT characters.
@@ -17,7 +19,6 @@ from app.events import Broadcaster
 from app.schemas.chat import ChatMessage
 from app.services.ollama import OllamaService
 
-# Concise — local models degrade on verbose system prompts.
 SYSTEM_PROMPT = (
     "You are Glassistant, an AI assistant for a smart mirror home dashboard. "
     "The dashboard shows widgets on a configurable grid. "
@@ -25,9 +26,9 @@ SYSTEM_PROMPT = (
     "Be concise."
 )
 
-MAX_ITERS = 6       # max tool-use rounds before forcing synthesis
-MAX_HISTORY = 6     # non-system messages kept per LLM call
-RESULT_LIMIT = 600  # max chars per tool result string
+MAX_ITERS = 6
+MAX_HISTORY = 6
+RESULT_LIMIT = 600
 
 
 def _trim(history: list[dict[str, Any]], max_turns: int = MAX_HISTORY) -> list[dict[str, Any]]:
@@ -51,22 +52,28 @@ async def run_agent(
     history: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     history += [{"role": m.role, "content": m.content} for m in messages]
 
-    # ── Tool-use phase ──────────────────────────────────────────────────────────
     for _ in range(MAX_ITERS):
-        resp = await ollama.chat(_trim(history), tools=TOOL_SCHEMAS)
-        msg = resp.get("message", {})
-        text: str = msg.get("content") or ""
-        tool_calls: list[dict[str, Any]] = msg.get("tool_calls") or []
+        accumulated_text = ""
+        tool_calls: list[dict[str, Any]] = []
 
-        assistant_entry: dict[str, Any] = {"role": "assistant", "content": text}
+        async for chunk in ollama.stream(_trim(history), tools=TOOL_SCHEMAS):
+            msg = chunk.get("message", {})
+            delta: str = msg.get("content", "") or ""
+            chunk_tools: list[dict[str, Any]] = msg.get("tool_calls") or []
+
+            if delta:
+                accumulated_text += delta
+                yield {"type": "text_delta", "content": delta}
+
+            if chunk_tools:
+                tool_calls.extend(chunk_tools)
+
+        assistant_entry: dict[str, Any] = {"role": "assistant", "content": accumulated_text}
         if tool_calls:
             assistant_entry["tool_calls"] = tool_calls
         history.append(assistant_entry)
 
         if not tool_calls:
-            # Model answered directly — this IS the final response.
-            if text:
-                yield {"type": "text_delta", "content": text}
             yield {"type": "done"}
             return
 
@@ -81,7 +88,7 @@ async def run_agent(
 
             history.append({"role": "tool", "content": result, "tool_name": name})
 
-    # ── Synthesis phase (streaming, no tool schemas) ─────────────────────────
+    # All iterations used tools — stream a final synthesis pass without tool schemas
     async for chunk in ollama.stream(_trim(history)):
         delta: str = chunk.get("message", {}).get("content", "") or ""
         if delta:
