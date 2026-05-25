@@ -194,12 +194,6 @@ export function Todo({ widget }: WidgetProps) {
                   )}
                 </div>
 
-                <span
-                  className="shrink-0 mt-0.5 text-fg-faint"
-                  style={{ fontSize: "clamp(0.75rem, 1.2vw, 1rem)" }}
-                >
-                  {todo.done ? "✓" : "○"}
-                </span>
               </div>
             );
           })}

@@ -3,6 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "./widgets/registry";
 import type { Widget, WidgetUpdate } from "../lib/types";
 
+/** Gap between grid cells in pixels. Both cell backgrounds and widget cards
+ *  live in the same CSS grid, so they are always pixel-perfect aligned. */
+const CELL_GAP = 3;
+
 interface AdminGridProps {
   widgets: Widget[];
   gridRows: number;
@@ -69,7 +73,7 @@ export function AdminGrid({
     [draggingId, widgets],
   );
 
-  // All occupied cells (used to identify empty cells for click-to-add)
+  // All occupied cells (includes span area)
   const allOccupied = useMemo(() => {
     const set = new Set<string>();
     for (const w of widgets) {
@@ -99,8 +103,7 @@ export function AdminGrid({
 
   function canDropAt(row: number, col: number): boolean {
     if (!draggingWidget || row < 0 || col < 0) return false;
-    if (row + draggingWidget.row_span > gridRows || col + draggingWidget.col_span > gridCols)
-      return false;
+    if (row + draggingWidget.row_span > gridRows || col + draggingWidget.col_span > gridCols) return false;
     for (let r = row; r < row + draggingWidget.row_span; r++) {
       for (let c = col; c < col + draggingWidget.col_span; c++) {
         if (occupiedByOthers.has(`${r},${c}`)) return false;
@@ -109,12 +112,21 @@ export function AdminGrid({
     return true;
   }
 
+  /** Map a drag-event cursor position to a grid cell, accounting for gap. */
   function cellFromEvent(e: React.DragEvent): { row: number; col: number } | null {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    const col = Math.floor(((e.clientX - rect.left) / rect.width) * gridCols);
-    const row = Math.floor(((e.clientY - rect.top) / rect.height) * gridRows);
-    if (col < 0 || col >= gridCols || row < 0 || row >= gridRows) return null;
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
+
+    // trackW/H = size of one cell track (excluding gap after it)
+    const trackW = (rect.width - (gridCols - 1) * CELL_GAP) / gridCols;
+    const trackH = (rect.height - (gridRows - 1) * CELL_GAP) / gridRows;
+
+    // Dividing by (trackW + CELL_GAP) treats each column-slot as trackW + gap wide,
+    // which maps cursor pixels to the correct column index.
+    const col = Math.min(gridCols - 1, Math.max(0, Math.floor(relX / (trackW + CELL_GAP))));
+    const row = Math.min(gridRows - 1, Math.max(0, Math.floor(relY / (trackH + CELL_GAP))));
     return { row, col };
   }
 
@@ -126,9 +138,7 @@ export function AdminGrid({
   }
 
   function handleDragLeave(e: React.DragEvent) {
-    if (!gridRef.current?.contains(e.relatedTarget as Node)) {
-      setHoverCell(null);
-    }
+    if (!gridRef.current?.contains(e.relatedTarget as Node)) setHoverCell(null);
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -143,8 +153,8 @@ export function AdminGrid({
     setHoverCell(null);
   }
 
-  // Compute dropdown position relative to the outer wrapper.
-  // Flip to above/right when the cell is in the bottom or right portion of the grid.
+  // Position the dropdown/edit panel near the relevant cell.
+  // Flips to above / right-aligned when the cell is in the lower or right portion.
   function getDropdownStyle(cell: { row: number; col: number }): React.CSSProperties {
     const inBottomHalf = cell.row >= gridRows / 2;
     const inRightPart = cell.col >= gridCols * 0.65;
@@ -162,138 +172,137 @@ export function AdminGrid({
 
   return (
     <div className="relative" style={{ margin: "0 auto", width: "fit-content", maxWidth: "100%" }}>
+      {/*
+        Single CSS grid — background cells AND widget cards are both grid items
+        with explicit placement, so they share the exact same track sizes and gap.
+        z-index layers: cells=1, cards=10, drop-zone overlay=20.
+      */}
       <div
         ref={gridRef}
-        className="relative select-none rounded-lg border border-white/10 overflow-hidden"
+        className="select-none rounded-lg border border-white/10 overflow-hidden"
         style={{
+          display: "grid",
           height: "480px",
           aspectRatio: `${gridCols} / ${gridRows}`,
           maxWidth: "100%",
+          gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+          gridTemplateRows: `repeat(${gridRows}, 1fr)`,
+          gap: `${CELL_GAP}px`,
+          // Background colour shows through the gap and rounded corners
+          backgroundColor: "rgba(255,255,255,0.05)",
         }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Background cell grid */}
-        <div
-          className="absolute inset-0 grid"
-          style={{
-            gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-            gridTemplateRows: `repeat(${gridRows}, 1fr)`,
-          }}
-        >
-          {Array.from({ length: gridRows * gridCols }, (_, i) => {
-            const row = Math.floor(i / gridCols);
-            const col = i % gridCols;
-            const inZone =
-              draggingWidget !== null &&
-              hoverCell !== null &&
-              row >= hoverCell.row &&
-              row < hoverCell.row + draggingWidget.row_span &&
-              col >= hoverCell.col &&
-              col < hoverCell.col + draggingWidget.col_span;
-            const isEmpty = !allOccupied.has(`${row},${col}`);
-            const isSelected = pendingCell?.row === row && pendingCell?.col === col;
-            return (
-              <div
-                key={i}
-                className={`group border border-white/[0.06] transition-colors ${
-                  inZone
-                    ? dropOk
-                      ? "bg-white/15 border-white/30"
-                      : "bg-red-500/20 border-red-400/30"
-                    : isSelected
-                      ? "bg-white/10 border-white/25"
-                      : isEmpty && !draggingId
-                        ? "cursor-pointer hover:bg-white/[0.06]"
-                        : ""
-                }`}
-                onClick={() => {
-                  if (isEmpty && !draggingId && !busy) {
-                    setPendingCell({ row, col });
-                    setPendingType(WIDGET_TYPES[0] ?? "clock");
-                    setSelectedWidgetId(null);
-                  }
-                }}
-              >
-                {isEmpty && !draggingId && (
-                  <span className="flex h-full w-full items-center justify-center text-base text-white/0 group-hover:text-white/20 transition-colors select-none">
-                    +
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* ── Layer 1: background cells (one per grid position) ── */}
+        {Array.from({ length: gridRows * gridCols }, (_, i) => {
+          const row = Math.floor(i / gridCols);
+          const col = i % gridCols;
+          const isEmpty = !allOccupied.has(`${row},${col}`);
+          const isSelected = pendingCell?.row === row && pendingCell?.col === col;
 
-        {/* Widget cards — pointer-events disabled on container so drag events
-            reach the grid; individual cards re-enable them for initiating drag */}
-        <div
-          className="absolute inset-0 grid pointer-events-none"
-          style={{
-            gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-            gridTemplateRows: `repeat(${gridRows}, 1fr)`,
-          }}
-        >
-          {widgets
-            .filter((w) => w.enabled)
-            .map((widget) => (
+          return (
+            <div
+              key={`cell-${i}`}
+              className={`group relative transition-colors ${
+                isSelected
+                  ? "bg-white/10"
+                  : isEmpty && !draggingId
+                    ? "bg-black/40 cursor-pointer hover:bg-white/[0.07]"
+                    : "bg-black/40"
+              }`}
+              style={{ gridRow: row + 1, gridColumn: col + 1, zIndex: 1 }}
+              onClick={() => {
+                if (isEmpty && !draggingId && !busy) {
+                  setPendingCell({ row, col });
+                  setPendingType(WIDGET_TYPES[0] ?? "clock");
+                  setSelectedWidgetId(null);
+                }
+              }}
+            >
+              {isEmpty && !draggingId && (
+                <span className="absolute inset-0 flex items-center justify-center text-base text-white/0 group-hover:text-white/20 transition-colors select-none pointer-events-none">
+                  +
+                </span>
+              )}
+            </div>
+          );
+        })}
+
+        {/* ── Layer 2: widget cards (span their full row×col area) ── */}
+        {widgets
+          .filter((w) => w.enabled)
+          .map((widget) => (
+            <div
+              key={`widget-${widget.id}`}
+              style={{
+                gridRow: `${widget.row + 1} / span ${widget.row_span}`,
+                gridColumn: `${widget.col + 1} / span ${widget.col_span}`,
+                zIndex: 10,
+              }}
+              className={`transition-opacity ${draggingId === widget.id ? "opacity-30" : "opacity-100"}`}
+            >
               <div
-                key={widget.id}
-                style={{
-                  gridRow: `${widget.row + 1} / span ${widget.row_span}`,
-                  gridColumn: `${widget.col + 1} / span ${widget.col_span}`,
-                  pointerEvents: "auto",
+                draggable={!busy}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  setDraggingId(widget.id);
+                  setSelectedWidgetId(null);
                 }}
-                className={`p-0.5 transition-opacity ${
-                  draggingId === widget.id ? "opacity-30" : "opacity-100"
+                onDragEnd={() => {
+                  setDraggingId(null);
+                  setHoverCell(null);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedWidgetId(widget.id === selectedWidgetId ? null : widget.id);
+                  setPendingCell(null);
+                }}
+                className={`h-full w-full cursor-grab active:cursor-grabbing rounded-sm border bg-white/10 backdrop-blur-sm p-1.5 flex flex-col gap-0.5 overflow-hidden transition-colors ${
+                  selectedWidgetId === widget.id ? "border-white/60" : "border-white/25"
                 }`}
               >
-                <div
-                  draggable={!busy}
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = "move";
-                    setDraggingId(widget.id);
-                    setSelectedWidgetId(null);
-                  }}
-                  onDragEnd={() => {
-                    setDraggingId(null);
-                    setHoverCell(null);
-                  }}
+                <span className="text-[11px] font-medium text-fg truncate leading-tight">
+                  {widget.type}
+                </span>
+                <span className="text-[9px] text-fg-faint leading-tight">
+                  r{widget.row} c{widget.col} · {widget.row_span}×{widget.col_span}
+                </span>
+                <button
+                  type="button"
+                  className="mt-auto text-[9px] text-red-300/50 hover:text-red-300 text-left leading-none"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedWidgetId(widget.id === selectedWidgetId ? null : widget.id);
-                    setPendingCell(null);
+                    if (window.confirm(`Delete ${widget.type} #${widget.id}?`)) {
+                      onDelete(widget.id);
+                    }
                   }}
-                  className={`h-full w-full cursor-grab active:cursor-grabbing rounded border bg-white/10 backdrop-blur-sm p-1.5 flex flex-col gap-0.5 overflow-hidden transition-colors ${
-                    selectedWidgetId === widget.id ? "border-white/60" : "border-white/25"
-                  }`}
                 >
-                  <span className="text-[11px] font-medium text-fg truncate leading-tight">
-                    {widget.type}
-                  </span>
-                  <span className="text-[9px] text-fg-faint leading-tight">
-                    r{widget.row} c{widget.col} · {widget.row_span}×{widget.col_span}
-                  </span>
-                  <button
-                    type="button"
-                    className="mt-auto text-[9px] text-red-300/50 hover:text-red-300 text-left leading-none"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete ${widget.type} #${widget.id}?`)) {
-                        onDelete(widget.id);
-                      }
-                    }}
-                  >
-                    delete
-                  </button>
-                </div>
+                  delete
+                </button>
               </div>
-            ))}
-        </div>
+            </div>
+          ))}
+
+        {/* ── Layer 3: drop-zone overlay (appears during drag) ── */}
+        {draggingWidget && hoverCell && (
+          <div
+            className={`pointer-events-none rounded-sm border-2 transition-colors ${
+              dropOk
+                ? "bg-white/15 border-white/50"
+                : "bg-red-500/20 border-red-400/50"
+            }`}
+            style={{
+              gridRow: `${hoverCell.row + 1} / span ${draggingWidget.row_span}`,
+              gridColumn: `${hoverCell.col + 1} / span ${draggingWidget.col_span}`,
+              zIndex: 20,
+            }}
+          />
+        )}
       </div>
 
-      {/* Add-widget dropdown — sibling of the grid so it escapes overflow-hidden */}
+      {/* ── Add-widget dropdown ── */}
       {pendingCell && (
         <div
           ref={dropdownRef}
@@ -344,7 +353,7 @@ export function AdminGrid({
         </div>
       )}
 
-      {/* Widget edit panel */}
+      {/* ── Widget edit panel ── */}
       {selectedWidgetId !== null && (() => {
         const w = widgets.find((x) => x.id === selectedWidgetId);
         if (!w) return null;
@@ -359,7 +368,13 @@ export function AdminGrid({
               <p className="text-[10px] uppercase tracking-wide text-fg-faint">
                 {w.type} #{w.id}
               </p>
-              <button type="button" onClick={() => setSelectedWidgetId(null)} className="text-[10px] text-fg-faint hover:text-fg">✕</button>
+              <button
+                type="button"
+                onClick={() => setSelectedWidgetId(null)}
+                className="text-[10px] text-fg-faint hover:text-fg"
+              >
+                ✕
+              </button>
             </div>
             <div className="flex gap-4 mb-3">
               <SizeSpinner label="Width" value={editColSpan} onChange={setEditColSpan} min={1} max={gridCols} />

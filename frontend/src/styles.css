@@ -102,6 +102,28 @@ body {
   50%      { opacity: 0.85; }
 }
 
+/* ── Form control polish ────────────────────────────────────────────────── */
+
+/* Native number spinners are bright OS widgets that clash with the dark theme.
+   Hide them globally — values can still be typed directly. */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Replace the OS select chevron with a subtle muted one that fits the theme.
+   The custom background-image overlays the existing bg-color set by bg-black. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1 5 5 9 1' stroke='rgba(255%2C255%2C255%2C0.35)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+
 .todo-scroll { scrollbar-width: none; }
 .todo-scroll::-webkit-scrollbar { display: none; }
 

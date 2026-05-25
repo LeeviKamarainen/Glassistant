@@ -140,7 +140,7 @@ export function Flights({ widget }: WidgetProps) {
   const shown = data.aircraft.slice(0, maxShown);
 
   return (
-    <div className="anim-fade-in flex flex-col gap-2 w-full">
+    <div className="anim-fade-in flex flex-col gap-2 w-full self-start">
       <Header count={data.aircraft.length} radiusKm={radiusKm} />
 
       {data.aircraft.length === 0 ? (
