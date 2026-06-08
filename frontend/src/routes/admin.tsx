@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 
 import { PreviewContext } from "../lib/previewContext";
 import { AdminGrid } from "../components/AdminGrid";
@@ -8,6 +8,7 @@ import { WidgetConfigEditor } from "../components/WidgetConfigEditor";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import type { WeatherCondition } from "../components/widgets/weather/icons";
 import { api } from "../lib/api";
+import { useCustomWidgets } from "../lib/customWidgets";
 import { useSse } from "../lib/sse";
 import { useEffectStyle } from "../lib/useEffectStyle";
 import type { EffectStyle } from "../lib/useEffectStyle";
@@ -15,7 +16,11 @@ import { useTheme } from "../lib/useTheme";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
 import { useGridConfig } from "../lib/useGridConfig";
-import type { Layout, SavedLayout, SseEvent, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
+import type { CustomWidget, Layout, SavedLayout, SseEvent, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
+
+// Lazy: only the admin "AI-Generated" browser section needs the Sucrase
+// runtime compiler, and only once a custom widget actually exists.
+const CustomWidgetRenderer = lazy(() => import("../components/widgets/CustomWidgetRenderer"));
 
 type AdminTab = "layout" | "components";
 
@@ -519,16 +524,23 @@ function ComponentBrowser({
 }) {
   const [query, setQuery] = useState("");
   const [expanding, setExpanding] = useState<string | null>(null);
+  const { widgets: customWidgets } = useCustomWidgets();
 
+  const q = query.toLowerCase();
   const filtered = WIDGET_TYPES.filter((key) => {
     const meta = WIDGET_REGISTRY[key]!;
-    const q = query.toLowerCase();
     return (
       key.includes(q) ||
       meta.label.toLowerCase().includes(q) ||
       meta.description.toLowerCase().includes(q)
     );
   });
+  const filteredCustom = customWidgets.filter(
+    (w) =>
+      w.key.includes(q) ||
+      w.name.toLowerCase().includes(q) ||
+      w.description.toLowerCase().includes(q),
+  );
 
   return (
     <div>
@@ -540,9 +552,37 @@ function ComponentBrowser({
         className="mb-6 w-full rounded-md border border-white/10 bg-black px-3 py-2 text-sm text-fg placeholder-fg-faint outline-none focus:border-white/40"
       />
 
-      {filtered.length === 0 ? (
+      {filteredCustom.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-widest text-violet-200/80">
+              AI-Generated
+            </span>
+            <span className="h-px flex-1 bg-violet-400/20" />
+          </div>
+          <div className="flex flex-col gap-6">
+            {filteredCustom.map((cw) => (
+              <CustomWidgetCard
+                key={cw.key}
+                customWidget={cw}
+                expanded={expanding === cw.key}
+                onExpand={() => setExpanding(expanding === cw.key ? null : cw.key)}
+                onAdd={async (create) => {
+                  await onAdd(create);
+                  setExpanding(null);
+                }}
+                disabled={disabled}
+                gridRows={gridRows}
+                gridCols={gridCols}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {filtered.length === 0 && filteredCustom.length === 0 ? (
         <div className="text-fg-faint text-sm">No components match "{query}".</div>
-      ) : (
+      ) : filtered.length > 0 ? (
         <div className="flex flex-col gap-6">
           {filtered.map((key) => {
             const meta = WIDGET_REGISTRY[key]!;
@@ -564,7 +604,162 @@ function ComponentBrowser({
             );
           })}
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+const CUSTOM_WIDGET_DEFAULT_SPAN = { rowSpan: 1, colSpan: 2 };
+
+function CustomWidgetCard({
+  customWidget,
+  expanded,
+  onExpand,
+  onAdd,
+  disabled,
+  gridRows,
+  gridCols,
+}: {
+  customWidget: CustomWidget;
+  expanded: boolean;
+  onExpand: () => void;
+  onAdd: (w: WidgetCreate) => Promise<void>;
+  disabled: boolean;
+  gridRows: number;
+  gridCols: number;
+}) {
+  const [row, setRow] = useState(0);
+  const [col, setCol] = useState(0);
+  const [rowSpan, setRowSpan] = useState(CUSTOM_WIDGET_DEFAULT_SPAN.rowSpan);
+  const [colSpan, setColSpan] = useState(CUSTOM_WIDGET_DEFAULT_SPAN.colSpan);
+  const [showSource, setShowSource] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onAdd({ type: customWidget.key, row, col, row_span: rowSpan, col_span: colSpan });
+  };
+
+  const mockWidget: Widget = {
+    id: -1,
+    type: customWidget.key,
+    row: 0,
+    col: 0,
+    row_span: rowSpan,
+    col_span: colSpan,
+    config: {},
+    enabled: true,
+    z_order: 0,
+    created_at: "",
+    updated_at: "",
+  };
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete the AI-generated widget "${customWidget.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteCustomWidget(customWidget.id);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
+    }
+  };
+
+  const previewHeight = rowSpan * 180;
+
+  return (
+    <div className="rounded-lg border border-violet-400/30 bg-violet-500/[0.03] overflow-hidden">
+      <div
+        className="flex items-center justify-center w-full overflow-hidden bg-black/60 p-8"
+        style={{ minHeight: previewHeight }}
+      >
+        <PreviewContext.Provider value={true}>
+          <Suspense fallback={<div className="text-xs text-fg-faint">Loading preview…</div>}>
+            <CustomWidgetRenderer widget={mockWidget} sourceCode={customWidget.source_code} />
+          </Suspense>
+        </PreviewContext.Provider>
+      </div>
+
+      <div className="p-3 border-t border-violet-400/20">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-medium text-fg">{customWidget.name}</span>
+              <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-wide text-violet-200/90">
+                AI
+              </span>
+              <span className="text-[10px] uppercase tracking-widest text-fg-dim">{customWidget.key}</span>
+            </div>
+            <div className="mt-0.5 text-xs text-fg-faint leading-relaxed">
+              {customWidget.description || "No description provided."}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onExpand}
+            disabled={disabled}
+            className={`shrink-0 rounded-md border px-3 py-1 text-sm transition ${
+              expanded
+                ? "border-violet-400/50 bg-violet-500/10 text-fg"
+                : "border-violet-400/30 text-fg-dim hover:border-violet-400/50 hover:text-fg"
+            } disabled:opacity-40`}
+          >
+            {expanded ? "Cancel" : "+ Add"}
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-3 border-t border-violet-400/20 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowSource((s) => !s)}
+            className="text-xs text-fg-faint hover:text-fg-dim transition"
+          >
+            {showSource ? "Hide source" : "View source"}
+          </button>
+          <span className="text-fg-faint/40">·</span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="text-xs text-red-300/70 hover:text-red-300 transition disabled:opacity-40"
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+          {deleteError && <span className="text-xs text-red-300/80">{deleteError}</span>}
+        </div>
+
+        {showSource && (
+          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-white/10 bg-black px-3 py-2 text-[11px] leading-relaxed text-fg-dim">
+            <code>{customWidget.source_code}</code>
+          </pre>
+        )}
+
+        {/* Size controls — always visible, drive the preview above */}
+        <div className="mt-3 flex items-end gap-2 border-t border-violet-400/20 pt-3">
+          <NumberInput label="Rows" value={rowSpan} onChange={setRowSpan} min={1} max={gridRows} />
+          <span className="pb-1.5 text-xs text-fg-faint">×</span>
+          <NumberInput label="Cols" value={colSpan} onChange={setColSpan} min={1} max={gridCols} />
+        </div>
+
+        {expanded && (
+          <form
+            onSubmit={submit}
+            className="mt-3 grid grid-cols-2 gap-2 border-t border-violet-400/20 pt-3"
+          >
+            <NumberInput label="Row" value={row} onChange={setRow} max={gridRows - 1} />
+            <NumberInput label="Col" value={col} onChange={setCol} max={gridCols - 1} />
+            <button
+              type="submit"
+              disabled={disabled}
+              className="col-span-2 mt-1 rounded-md bg-white text-black px-3 py-1.5 text-sm font-medium hover:bg-white/90 disabled:opacity-50"
+            >
+              Add to layout ({rowSpan}×{colSpan})
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

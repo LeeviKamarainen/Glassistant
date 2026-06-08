@@ -164,10 +164,28 @@ export interface LoadLayoutResult {
   skipped_types: string[];
 }
 
+// ── Custom (AI-generated) widgets ────────────────────────────────────────────
+
+export interface CustomWidget {
+  id: number;
+  key: string;
+  name: string;
+  description: string;
+  source_code: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomWidgetsPayload {
+  widgets: CustomWidget[];
+}
+
 export type SseEvent =
   | { type: "layout_changed"; payload: Layout }
   | { type: "settings_changed"; payload: SettingsPayload }
   | { type: "todos_changed"; payload: Record<string, never> }
+  | { type: "custom_widgets_changed"; payload: CustomWidgetsPayload }
   | { type: string; payload: unknown };
 
 // ── Chat / AI agent ──────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import type {
   CalendarWeekResponse,
   ChatEvent,
   ChatMessage,
+  CustomWidget,
   FlightsPayload,
   Layout,
   LoadLayoutResult,
@@ -108,6 +109,14 @@ export const api = {
     request<LoadLayoutResult>("POST", `/api/saved-layouts/${id}/load`, { known_types: knownTypes }),
   deleteSavedLayout: (id: number) =>
     request<void>("DELETE", `/api/saved-layouts/${id}`),
+
+  // Custom (AI-generated) widgets
+  getCustomWidgets: () =>
+    request<CustomWidget[]>("GET", "/api/custom-widgets"),
+  createCustomWidget: (body: { name: string; description?: string; source_code: string }) =>
+    request<CustomWidget>("POST", "/api/custom-widgets", body),
+  deleteCustomWidget: (id: number) =>
+    request<void>("DELETE", `/api/custom-widgets/${id}`),
 
   planTransit: (
     origin: { lat: number; lon: number },

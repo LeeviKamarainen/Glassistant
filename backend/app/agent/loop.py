@@ -14,7 +14,7 @@ import sqlite3
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.agent.tools import TOOL_SCHEMAS, dispatch
+from app.agent.tools import build_tool_schemas, dispatch
 from app.events import Broadcaster
 from app.schemas.chat import ChatMessage
 from app.services.ollama import OllamaService
@@ -23,6 +23,10 @@ SYSTEM_PROMPT = (
     "You are Glassistant, an AI assistant for a smart mirror home dashboard. "
     "The dashboard shows widgets on a configurable grid. "
     "Always call list_widgets before adding or moving anything. "
+    "If the user wants something no existing widget type can show, you may write "
+    "a brand-new one with create_custom_widget (it stores and validates the code "
+    "and gives you back a type key), then place it with add_widget — but prefer "
+    "reusing an existing type whenever one reasonably fits. "
     "Be concise."
 )
 
@@ -56,7 +60,7 @@ async def run_agent(
         accumulated_text = ""
         tool_calls: list[dict[str, Any]] = []
 
-        async for chunk in ollama.stream(_trim(history), tools=TOOL_SCHEMAS):
+        async for chunk in ollama.stream(_trim(history), tools=build_tool_schemas(conn)):
             msg = chunk.get("message", {})
             delta: str = msg.get("content", "") or ""
             chunk_tools: list[dict[str, Any]] = msg.get("tool_calls") or []

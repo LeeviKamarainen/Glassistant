@@ -1,8 +1,14 @@
 import type { ReactNode } from "react";
+import { Suspense, lazy } from "react";
 
+import { isCustomWidgetType, useCustomWidgets } from "../lib/customWidgets";
 import type { Widget } from "../lib/types";
 import { AutoScroll } from "./AutoScroll";
 import { WIDGET_REGISTRY, WIDGETS } from "./widgets/registry";
+
+// Lazy: Sucrase (the JSX runtime compiler for AI-generated widgets) is only
+// fetched when a layout actually contains one — keeps the base bundle lean.
+const CustomWidgetRenderer = lazy(() => import("./widgets/CustomWidgetRenderer"));
 
 interface GridProps {
   widgets: Widget[];
@@ -14,6 +20,7 @@ interface GridProps {
 
 export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridProps) {
   const visible = hideDisabled ? widgets.filter((w) => w.enabled) : widgets;
+  const { byKey: customWidgets } = useCustomWidgets();
   return (
     <div
       className="grid h-full w-full gap-4 p-6"
@@ -23,15 +30,22 @@ export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridP
       }}
     >
       {visible.map((widget) => (
-        <Cell key={widget.id} widget={widget} />
+        <Cell key={widget.id} widget={widget} customWidget={customWidgets[widget.type]} />
       ))}
     </div>
   );
 }
 
-function Cell({ widget }: { widget: Widget }) {
+function Cell({
+  widget,
+  customWidget,
+}: {
+  widget: Widget;
+  customWidget: { source_code: string; name: string } | undefined;
+}) {
   const Component = WIDGETS[widget.type];
   const meta = WIDGET_REGISTRY[widget.type];
+  const isCustom = isCustomWidgetType(widget.type);
   const style = {
     gridRow: `${widget.row + 1} / span ${widget.row_span}`,
     gridColumn: `${widget.col + 1} / span ${widget.col_span}`,
@@ -40,8 +54,17 @@ function Cell({ widget }: { widget: Widget }) {
     <div
       style={style}
       data-widget-cell="true"
-      className="flex items-center justify-center overflow-hidden rounded-lg"
+      data-ai-widget={isCustom ? "true" : undefined}
+      className={
+        "relative flex items-center justify-center overflow-hidden rounded-lg" +
+        (isCustom ? " ring-1 ring-inset ring-violet-400/40" : "")
+      }
     >
+      {isCustom && (
+        <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-wide text-violet-200/90">
+          AI
+        </span>
+      )}
       {Component ? (
         // scrollManaged widgets (e.g. Todo) handle scroll themselves.
         // Everyone else: wrap in AutoScroll when the per-instance flag is set.
@@ -52,6 +75,10 @@ function Cell({ widget }: { widget: Widget }) {
         ) : (
           <Component widget={widget} />
         )
+      ) : isCustom && customWidget ? (
+        <Suspense fallback={null}>
+          <CustomWidgetRenderer widget={widget} sourceCode={customWidget.source_code} />
+        </Suspense>
       ) : (
         <UnknownWidget type={widget.type} />
       )}

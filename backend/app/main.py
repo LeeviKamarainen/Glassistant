@@ -16,6 +16,7 @@ from app.events import Broadcaster
 from app.repositories import widgets as widgets_repo
 from app.routers import calendar as calendar_router
 from app.routers import chat as chat_router
+from app.routers import custom_widgets as custom_widgets_router
 from app.routers import events as events_router
 from app.routers import flights as flights_router
 from app.routers import layout as layout_router
@@ -123,6 +124,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(calendar_router.router)
     app.include_router(spotify_router.router)
     app.include_router(saved_layouts_router.router)
+    app.include_router(custom_widgets_router.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
