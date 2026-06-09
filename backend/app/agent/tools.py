@@ -192,6 +192,94 @@ def build_tool_schemas(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_custom_widget_source",
+                "description": (
+                    "Fetch the current source code of a custom (AI-generated) widget, "
+                    "with line-number prefixes (like `cat -n`). Call this before editing "
+                    "one with edit_custom_widget_lines or edit_custom_widget_string so you "
+                    "know the exact current line numbers and text."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "The custom widget's type key, e.g. 'ai_inspirational_quote'",
+                        },
+                    },
+                    "required": ["key"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "edit_custom_widget_lines",
+                "description": (
+                    "Replace an inclusive range of lines (1-indexed, as shown by "
+                    "get_custom_widget_source) in a custom widget's source with new code. "
+                    "Use for structural edits spanning whole lines. The result is "
+                    "re-validated against the widget contract before saving — "
+                    "" + CUSTOM_WIDGET_CONTRACT
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "The custom widget's type key",
+                        },
+                        "start_line": {
+                            "type": "integer",
+                            "description": "First line to replace (1-indexed, inclusive)",
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "description": "Last line to replace (1-indexed, inclusive)",
+                        },
+                        "new_code": {
+                            "type": "string",
+                            "description": "The code to put in place of those lines (may be multiple lines, or empty to delete them)",
+                        },
+                    },
+                    "required": ["key", "start_line", "end_line", "new_code"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "edit_custom_widget_string",
+                "description": (
+                    "Find a unique snippet of text in a custom widget's source and replace "
+                    "it with new text. old_string must match exactly once — include enough "
+                    "surrounding context to make it unique (whitespace included). Use for "
+                    "small, surgical edits. The result is re-validated against the widget "
+                    "contract before saving — " + CUSTOM_WIDGET_CONTRACT
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "key": {
+                            "type": "string",
+                            "description": "The custom widget's type key",
+                        },
+                        "old_string": {
+                            "type": "string",
+                            "description": "Exact text to find — must occur exactly once in the source",
+                        },
+                        "new_string": {
+                            "type": "string",
+                            "description": "Text to replace it with",
+                        },
+                    },
+                    "required": ["key", "old_string", "new_string"],
+                },
+            },
+        },
     ]
 
 
@@ -286,6 +374,46 @@ async def dispatch(
                 f"Created custom widget type={widget.key!r} ({widget.name!r}). "
                 f"Place it on the grid with add_widget using type={widget.key!r}."
             )
+
+        if name == "get_custom_widget_source":
+            key = args["key"]
+            widget = custom_widgets_repo.get_by_key(conn, key)
+            if widget is None:
+                return f"Error: no custom widget with key {key!r}."
+            return (
+                f"Source for {key!r} ({widget.name!r}):\n"
+                + custom_widgets_repo.numbered_source(widget.source_code)
+            )
+
+        if name == "edit_custom_widget_lines":
+            try:
+                widget = custom_widgets_repo.edit_by_lines(
+                    conn,
+                    args["key"],
+                    int(args["start_line"]),
+                    int(args["end_line"]),
+                    args["new_code"],
+                )
+            except CustomWidgetError as e:
+                return f"Error: {e}"
+            await broadcaster.publish(
+                "custom_widgets_changed",
+                {"widgets": [w.model_dump(mode="json") for w in custom_widgets_repo.list_custom_widgets(conn)]},
+            )
+            return f"Updated custom widget {widget.key!r} (lines {args['start_line']}-{args['end_line']} replaced)."
+
+        if name == "edit_custom_widget_string":
+            try:
+                widget = custom_widgets_repo.edit_by_string(
+                    conn, args["key"], args["old_string"], args["new_string"]
+                )
+            except CustomWidgetError as e:
+                return f"Error: {e}"
+            await broadcaster.publish(
+                "custom_widgets_changed",
+                {"widgets": [w.model_dump(mode="json") for w in custom_widgets_repo.list_custom_widgets(conn)]},
+            )
+            return f"Updated custom widget {widget.key!r}."
 
         return f"Unknown tool: {name}"
 

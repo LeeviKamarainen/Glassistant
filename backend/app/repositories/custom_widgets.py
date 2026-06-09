@@ -143,3 +143,64 @@ def create_custom_widget(
 def delete_custom_widget(conn: sqlite3.Connection, widget_id: int) -> bool:
     cur = conn.execute("DELETE FROM custom_widgets WHERE id = ?", (widget_id,))
     return cur.rowcount > 0
+
+
+def numbered_source(source_code: str) -> str:
+    """Render source with `cat -n` style line-number prefixes for the agent to target edits."""
+    lines = source_code.splitlines()
+    width = len(str(len(lines)))
+    return "\n".join(f"{i:>{width}}\t{line}" for i, line in enumerate(lines, start=1))
+
+
+def _save_edited_source(
+    conn: sqlite3.Connection, widget: CustomWidgetOut, new_source: str
+) -> CustomWidgetOut:
+    validate_source(new_source)
+    conn.execute(
+        "UPDATE custom_widgets SET source_code = ?, updated_at = datetime('now') WHERE id = ?",
+        (new_source, widget.id),
+    )
+    result = get_by_key(conn, widget.key)
+    assert result is not None
+    return result
+
+
+def edit_by_lines(
+    conn: sqlite3.Connection, key: str, start_line: int, end_line: int, new_code: str
+) -> CustomWidgetOut:
+    """Replace the inclusive line range [start_line, end_line] (1-indexed) with new_code."""
+    widget = get_by_key(conn, key)
+    if widget is None:
+        raise CustomWidgetError(f"no custom widget with key {key!r}")
+
+    lines = widget.source_code.splitlines()
+    if start_line < 1 or end_line < start_line or end_line > len(lines):
+        raise CustomWidgetError(
+            f"line range {start_line}-{end_line} is out of bounds for a "
+            f"{len(lines)}-line source — call get_custom_widget_source to see current line numbers"
+        )
+
+    replacement = new_code.splitlines()
+    new_lines = lines[: start_line - 1] + replacement + lines[end_line:]
+    return _save_edited_source(conn, widget, "\n".join(new_lines))
+
+
+def edit_by_string(
+    conn: sqlite3.Connection, key: str, old_string: str, new_string: str
+) -> CustomWidgetOut:
+    """Replace a single unique occurrence of old_string with new_string."""
+    widget = get_by_key(conn, key)
+    if widget is None:
+        raise CustomWidgetError(f"no custom widget with key {key!r}")
+
+    count = widget.source_code.count(old_string)
+    if count == 0:
+        raise CustomWidgetError("old_string not found in source — check it matches exactly, including whitespace")
+    if count > 1:
+        raise CustomWidgetError(
+            f"old_string is not unique — found {count} occurrences, "
+            "include more surrounding context so it matches exactly once"
+        )
+
+    new_source = widget.source_code.replace(old_string, new_string, 1)
+    return _save_edited_source(conn, widget, new_source)

@@ -1,6 +1,7 @@
 """POST /api/chat — streaming agent endpoint.
 
 Returns text/event-stream with newline-delimited SSE events:
+  {"type": "thinking_delta", "content": "..."}
   {"type": "text_delta",  "content": "..."}
   {"type": "tool_start",  "tool": "...", "args": {...}}
   {"type": "tool_result", "tool": "...", "result": "..."}

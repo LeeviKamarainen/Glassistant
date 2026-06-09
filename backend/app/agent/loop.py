@@ -27,6 +27,10 @@ SYSTEM_PROMPT = (
     "a brand-new one with create_custom_widget (it stores and validates the code "
     "and gives you back a type key), then place it with add_widget — but prefer "
     "reusing an existing type whenever one reasonably fits. "
+    "To change an existing custom (ai_*) widget, call get_custom_widget_source first "
+    "to see its current code and line numbers, then use edit_custom_widget_lines for "
+    "structural changes or edit_custom_widget_string for small surgical replacements — "
+    "never recreate it from scratch. "
     "Be concise."
 )
 
@@ -47,6 +51,15 @@ def _compact(result: str) -> str:
     return result
 
 
+def _tool_label(name: str) -> str:
+    return name.replace("_", " ").capitalize()
+
+
+async def _announce(broadcaster: Broadcaster, phase: str, label: str) -> None:
+    """Broadcast a coarse activity update so /mirror can show what the agent is doing."""
+    await broadcaster.publish("agent_activity", {"phase": phase, "label": label})
+
+
 async def run_agent(
     messages: list[ChatMessage],
     conn: sqlite3.Connection,
@@ -56,6 +69,8 @@ async def run_agent(
     history: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     history += [{"role": m.role, "content": m.content} for m in messages]
 
+    phase: str | None = None
+
     for _ in range(MAX_ITERS):
         accumulated_text = ""
         tool_calls: list[dict[str, Any]] = []
@@ -63,9 +78,19 @@ async def run_agent(
         async for chunk in ollama.stream(_trim(history), tools=build_tool_schemas(conn)):
             msg = chunk.get("message", {})
             delta: str = msg.get("content", "") or ""
+            thinking: str = msg.get("thinking", "") or ""
             chunk_tools: list[dict[str, Any]] = msg.get("tool_calls") or []
 
+            if thinking:
+                if phase != "thinking":
+                    phase = "thinking"
+                    await _announce(broadcaster, phase, "Thinking…")
+                yield {"type": "thinking_delta", "content": thinking}
+
             if delta:
+                if phase != "responding":
+                    phase = "responding"
+                    await _announce(broadcaster, phase, "Responding…")
                 accumulated_text += delta
                 yield {"type": "text_delta", "content": delta}
 
@@ -78,6 +103,7 @@ async def run_agent(
         history.append(assistant_entry)
 
         if not tool_calls:
+            await _announce(broadcaster, "done", "Done")
             yield {"type": "done"}
             return
 
@@ -86,6 +112,8 @@ async def run_agent(
             name: str = fn.get("name", "")
             args: dict[str, Any] = fn.get("arguments") or {}
 
+            phase = "tool"
+            await _announce(broadcaster, phase, _tool_label(name))
             yield {"type": "tool_start", "tool": name, "args": args}
             result = _compact(await dispatch(name, args, conn, broadcaster))
             yield {"type": "tool_result", "tool": name, "result": result}
@@ -94,8 +122,19 @@ async def run_agent(
 
     # All iterations used tools — stream a final synthesis pass without tool schemas
     async for chunk in ollama.stream(_trim(history)):
-        delta: str = chunk.get("message", {}).get("content", "") or ""
+        msg = chunk.get("message", {})
+        thinking: str = msg.get("thinking", "") or ""
+        delta: str = msg.get("content", "") or ""
+        if thinking:
+            if phase != "thinking":
+                phase = "thinking"
+                await _announce(broadcaster, phase, "Thinking…")
+            yield {"type": "thinking_delta", "content": thinking}
         if delta:
+            if phase != "responding":
+                phase = "responding"
+                await _announce(broadcaster, phase, "Responding…")
             yield {"type": "text_delta", "content": delta}
 
+    await _announce(broadcaster, "done", "Done")
     yield {"type": "done"}

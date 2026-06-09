@@ -181,11 +181,17 @@ export interface CustomWidgetsPayload {
   widgets: CustomWidget[];
 }
 
+export interface AgentActivity {
+  phase: "thinking" | "tool" | "responding" | "done" | string;
+  label: string;
+}
+
 export type SseEvent =
   | { type: "layout_changed"; payload: Layout }
   | { type: "settings_changed"; payload: SettingsPayload }
   | { type: "todos_changed"; payload: Record<string, never> }
   | { type: "custom_widgets_changed"; payload: CustomWidgetsPayload }
+  | { type: "agent_activity"; payload: AgentActivity }
   | { type: string; payload: unknown };
 
 // ── Chat / AI agent ──────────────────────────────────────────────────────────
@@ -198,6 +204,7 @@ export interface ChatMessage {
 }
 
 export type ChatEvent =
+  | { type: "thinking_delta"; content: string }
   | { type: "text_delta"; content: string }
   | { type: "tool_start"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: string }

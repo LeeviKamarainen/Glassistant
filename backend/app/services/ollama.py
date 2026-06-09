@@ -21,8 +21,15 @@ class OllamaService:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        think: bool = True,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Streaming call — works with or without tool schemas."""
+        """Streaming call — works with or without tool schemas.
+
+        `think=True` asks Ollama to separate reasoning into `message.thinking`
+        for models that support it (e.g. gemma4, qwen3, deepseek-r1). Models
+        without thinking support reject the field with HTTP 400, so on that
+        error we transparently retry once without it.
+        """
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -30,11 +37,20 @@ class OllamaService:
         }
         if tools:
             payload["tools"] = tools
-        async with self._client.stream(
-            "POST", f"{self._base_url}/api/chat", json=payload
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                line = line.strip()
-                if line:
-                    yield json.loads(line)
+        if think:
+            payload["think"] = True
+        try:
+            async with self._client.stream(
+                "POST", f"{self._base_url}/api/chat", json=payload
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    line = line.strip()
+                    if line:
+                        yield json.loads(line)
+        except httpx.HTTPStatusError as e:
+            if think and e.response.status_code == 400:
+                async for chunk in self.stream(messages, tools=tools, think=False):
+                    yield chunk
+                return
+            raise

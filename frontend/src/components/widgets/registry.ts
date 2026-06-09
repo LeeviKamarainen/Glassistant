@@ -1,6 +1,7 @@
 import type { FC } from "react";
 
 import type { Widget } from "../../lib/types";
+import { AgentActivity } from "./AgentActivity";
 import { Calendar } from "./Calendar";
 import { Clock } from "./Clock";
 import { Countdown } from "./Countdown";
@@ -86,6 +87,13 @@ export interface WidgetMeta {
 }
 
 export const WIDGET_REGISTRY: Record<string, WidgetMeta> = {
+  agent_activity: {
+    component: AgentActivity,
+    label: "Assistant Activity",
+    description: "Shows the last few steps the AI assistant is taking behind the scenes.",
+    defaultSize: { rowSpan: 1, colSpan: 2 },
+    // No configurable options — fed live by agent_activity SSE events.
+  },
   clock: {
     component: Clock,
     label: "Clock",

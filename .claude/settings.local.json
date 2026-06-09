@@ -14,7 +14,9 @@
       "Bash(Format-Table FullName)",
       "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\\\\components\\\\widgets\" -Recurse)",
       "Bash(Get-ChildItem -Path \"D:\\\\Glassistant\\\\frontend\\\\src\" -ErrorAction SilentlyContinue)",
-      "WebFetch(domain:docs.ollama.com)"
+      "WebFetch(domain:docs.ollama.com)",
+      "Bash(cat app/agent/widget_registry.py)",
+      "Bash(powershell -c \"Get-Content app/agent/widget_registry.py\")"
     ]
   }
 }

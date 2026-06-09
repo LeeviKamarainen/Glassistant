@@ -27,6 +27,11 @@ class WidgetMeta:
 
 # Keep entries in the same order as frontend/src/components/widgets/registry.ts
 WIDGET_REGISTRY: dict[str, WidgetMeta] = {
+    "agent_activity": WidgetMeta(
+        label="Assistant Activity",
+        description="Shows the last few steps the AI assistant is taking behind the scenes.",
+        default_col_span=2,
+    ),
     "clock": WidgetMeta(
         label="Clock",
         description="Current time with optional seconds and 12/24h format.",
