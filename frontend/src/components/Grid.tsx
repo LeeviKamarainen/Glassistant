@@ -1,9 +1,11 @@
+import React from "react";
 import type { ReactNode } from "react";
 import { Suspense, lazy } from "react";
 
 import { isCustomWidgetType, useCustomWidgets } from "../lib/customWidgets";
 import type { Widget } from "../lib/types";
 import { AutoScroll } from "./AutoScroll";
+import { FitCell } from "./FitCell";
 import { WIDGET_REGISTRY, WIDGETS } from "./widgets/registry";
 
 // Lazy: Sucrase (the JSX runtime compiler for AI-generated widgets) is only
@@ -16,21 +18,24 @@ interface GridProps {
   gridCols: number;
   /** When true, hide disabled widgets entirely (mirror view). */
   hideDisabled?: boolean;
+  /** Show a subtle background on each cell. Default true. */
+  showBorders?: boolean;
 }
 
-export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridProps) {
+export function Grid({ widgets, hideDisabled = true, gridRows, gridCols, showBorders = true }: GridProps) {
   const visible = hideDisabled ? widgets.filter((w) => w.enabled) : widgets;
   const { byKey: customWidgets } = useCustomWidgets();
   return (
     <div
-      className="grid h-full w-full gap-4 p-6"
+      className="grid h-full w-full gap-2 p-4"
       style={{
         gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
         gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
+        fontSize: "calc(1rem * var(--font-scale, 1))",
       }}
     >
       {visible.map((widget) => (
-        <Cell key={widget.id} widget={widget} customWidget={customWidgets[widget.type]} />
+        <Cell key={widget.id} widget={widget} customWidget={customWidgets[widget.type]} showBorders={showBorders} />
       ))}
     </div>
   );
@@ -39,45 +44,45 @@ export function Grid({ widgets, hideDisabled = true, gridRows, gridCols }: GridP
 function Cell({
   widget,
   customWidget,
+  showBorders,
 }: {
   widget: Widget;
   customWidget: { source_code: string; name: string } | undefined;
+  showBorders: boolean;
 }) {
   const Component = WIDGETS[widget.type];
   const meta = WIDGET_REGISTRY[widget.type];
   const isCustom = isCustomWidgetType(widget.type);
+  const widgetScale = (widget.config as { font_scale?: number } | null)?.font_scale;
   const style = {
     gridRow: `${widget.row + 1} / span ${widget.row_span}`,
     gridColumn: `${widget.col + 1} / span ${widget.col_span}`,
-  };
+    ...(widgetScale != null ? { "--font-scale": String(widgetScale) } : {}),
+  } as React.CSSProperties;
   return (
     <div
       style={style}
       data-widget-cell="true"
-      data-ai-widget={isCustom ? "true" : undefined}
-      className={
-        "relative flex items-center justify-center overflow-hidden rounded-lg" +
-        (isCustom ? " ring-1 ring-inset ring-violet-400/40" : "")
-      }
+      className={`relative flex items-center justify-center overflow-hidden rounded-xl${showBorders ? " bg-white/[0.03]" : ""}`}
     >
-      {isCustom && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded-full bg-violet-500/20 px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-wide text-violet-200/90">
-          AI
-        </span>
-      )}
       {Component ? (
-        // scrollManaged widgets (e.g. Todo) handle scroll themselves.
-        // Everyone else: wrap in AutoScroll when the per-instance flag is set.
-        !meta?.scrollManaged && (widget.config as { auto_scroll?: boolean } | null)?.auto_scroll ? (
+        meta?.scrollManaged ? (
+          // scrollManaged widgets (e.g. Todo) manage their own scroll/layout.
+          <Component widget={widget} />
+        ) : (widget.config as { auto_scroll?: boolean } | null)?.auto_scroll ? (
           <AutoScroll>
             <Component widget={widget} />
           </AutoScroll>
         ) : (
-          <Component widget={widget} />
+          <FitCell widgetId={widget.id}>
+            <Component widget={widget} />
+          </FitCell>
         )
       ) : isCustom && customWidget ? (
         <Suspense fallback={null}>
-          <CustomWidgetRenderer widget={widget} sourceCode={customWidget.source_code} />
+          <FitCell widgetId={widget.id}>
+            <CustomWidgetRenderer widget={widget} sourceCode={customWidget.source_code} />
+          </FitCell>
         </Suspense>
       ) : (
         <UnknownWidget type={widget.type} />

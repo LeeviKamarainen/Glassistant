@@ -149,7 +149,7 @@ export function Calendar(_props: WidgetProps) {
               <div
                 className="text-xs uppercase tracking-widest leading-none"
                 style={{
-                  fontSize: "clamp(0.45rem, 0.9vw, 0.65rem)",
+                  fontSize: "calc(clamp(0.6rem, 1vw, 0.75rem) * var(--font-scale, 1))",
                   color: isToday ? "var(--theme-accent)" : "var(--theme-fg-dim)",
                   fontWeight: isToday ? 600 : 400,
                 }}
@@ -159,7 +159,7 @@ export function Calendar(_props: WidgetProps) {
               <div
                 className="leading-none"
                 style={{
-                  fontSize: "clamp(0.85rem, 1.6vw, 1.4rem)",
+                  fontSize: "calc(clamp(0.85rem, 1.6vw, 1.4rem) * var(--font-scale, 1))",
                   fontWeight: isToday ? 700 : 400,
                   color: isToday ? "var(--theme-fg)" : "var(--theme-fg-dim)",
                   marginTop: "2px",
@@ -178,7 +178,7 @@ export function Calendar(_props: WidgetProps) {
                     key={ev.id}
                     className="overflow-hidden text-ellipsis whitespace-nowrap rounded"
                     style={{
-                      fontSize: "clamp(0.4rem, 0.75vw, 0.6rem)",
+                      fontSize: "calc(clamp(0.55rem, 0.9vw, 0.7rem) * var(--font-scale, 1))",
                       padding: "1px 3px",
                       color: isToday ? "var(--theme-fg)" : "var(--theme-fg-dim)",
                       background: "rgba(255,255,255,0.05)",
@@ -195,7 +195,7 @@ export function Calendar(_props: WidgetProps) {
               {overflow > 0 && (
                 <div
                   className="text-fg-faint"
-                  style={{ fontSize: "clamp(0.38rem, 0.7vw, 0.55rem)", padding: "1px 3px" }}
+                  style={{ fontSize: "calc(clamp(0.55rem, 0.85vw, 0.65rem) * var(--font-scale, 1))", padding: "1px 3px" }}
                 >
                   +{overflow} more
                 </div>

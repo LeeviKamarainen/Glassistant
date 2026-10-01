@@ -5,6 +5,8 @@ import { WeatherEffect } from "../components/WeatherEffect";
 import { api } from "../lib/api";
 import { useSse } from "../lib/sse";
 import { useEffectStyle } from "../lib/useEffectStyle";
+import { useFontScale } from "../lib/useFontScale";
+import { useWidgetBorders } from "../lib/useWidgetBorders";
 import { THEMES } from "../lib/themes";
 import { useTheme } from "../lib/useTheme";
 import { useGridConfig } from "../lib/useGridConfig";
@@ -14,6 +16,8 @@ export default function Mirror() {
   const theme = useTheme();
   const effectStyle = useEffectStyle();
   const gridConfig = useGridConfig();
+  useFontScale();
+  const widgetBorders = useWidgetBorders();
 
   const [layout, setLayout] = useState<Layout | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +92,7 @@ export default function Mirror() {
             widgets={layout.widgets}
             gridRows={gridConfig.rows}
             gridCols={gridConfig.cols}
+            showBorders={widgetBorders.show}
           />
         )}
       </div>

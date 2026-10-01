@@ -1,6 +1,6 @@
 # Glassistant
 
-Magic-mirror home assistant. The idea in the long run is to have a Raspberry Pi driving a monitor behind a two-way mirror; widgets are arranged on a dynamic grid. An AI agent powered by Ollama can rearrange the dashboard, answer questions, and use tools — all without leaving the room.
+Magic-mirror home assistant. The idea in the long run is to have a Raspberry Pi driving a monitor behind a two-way mirror; widgets are arranged on a dynamic grid. An AI agent powered by Ollama can rearrange the dashboard, write its own custom widgets, and take voice input — all without leaving the room.
 
 Currently very much WIP. Claude Code has been very helpful during the project.
 
@@ -37,7 +37,7 @@ Currently very much WIP. Claude Code has been very helpful during the project.
 
 ### AI — chat panel
 
-> Floating chat panel in the admin view. The Ollama-backed ReAct agent can add, move, and remove widgets in real time via tool calls, with streaming output and collapsible tool-step cards.
+> Floating chat panel in the admin view (with push-to-talk voice input). The Ollama-backed ReAct agent can add, move, and remove widgets, and write or edit custom widgets, in real time via tool calls, with streaming output and collapsible tool-step cards.
 
 <!-- Replace with an actual screenshot -->
 ![AI chat panel](docs/screenshots/ai.png)
@@ -49,7 +49,7 @@ Currently very much WIP. Claude Code has been very helpful during the project.
 - **Backend:** Python 3.11+, FastAPI, uvicorn, stdlib `sqlite3` (no ORM).
 - **Frontend:** Vite, React 18, TypeScript, Tailwind, React Router.
 - **Persistence:** SQLite file in `backend/glassistant.db`.
-- **AI:** [Ollama](https://ollama.ai) (local LLM, tool-use compatible model required — e.g. `llama3.1`).
+- **AI:** [Ollama](https://ollama.ai) (local LLM, tool-use compatible model required; default `gemma4:12b`, with `gemma4:4b` for voice transcription).
 
 ## Widgets
 
@@ -66,6 +66,10 @@ Currently very much WIP. Claude Code has been very helpful during the project.
 | `countdown` | Countdown | Days/hours until or since a target date |
 | `spotify` | Spotify | Currently playing track — album art, title, progress |
 | `flights` | Flights | Live aircraft overhead via OpenSky Network |
+| `agent_activity` | Assistant Activity | What the AI assistant is doing right now |
+| `ai_*` | Custom widgets | Widgets written by the AI agent on request (JSX stored in SQLite, rendered in the browser) |
+
+Widgets are display-only on `/mirror`; todos, countdowns and settings are edited from `/admin` or `/mobile`.
 
 ## Routes
 
@@ -108,13 +112,14 @@ Open the views:
 
 ### Ollama (AI agent)
 
-Install [Ollama](https://ollama.ai), then pull a tool-use capable model:
+Install [Ollama](https://ollama.ai), then pull a tool-use capable model (and a small audio-capable one if you want voice input):
 
 ```bash
-ollama pull llama3.1
+ollama pull gemma4:12b
+ollama pull gemma4:4b
 ```
 
-Set `GLASSISTANT_OLLAMA_MODEL=llama3.1` in `.env` (or the model of your choice). The chat panel in `/admin` will activate automatically once Ollama is reachable.
+Set `GLASSISTANT_OLLAMA_MODEL` / `GLASSISTANT_OLLAMA_TRANSCRIPTION_MODEL` in `.env` to use other models. The chat panel in `/admin` will activate automatically once Ollama is reachable. Voice input records in the browser, converts to 16 kHz WAV and sends it to `/api/transcribe`.
 
 ### Tests
 
@@ -145,7 +150,7 @@ Then open `http://localhost:8000/mirror` — FastAPI serves the built frontend f
 | POST | `/api/layout/reset` | Reset to default layout |
 | GET | `/api/widget-types` | All registered widget types from the backend registry |
 | GET | `/api/weather?lat=&lon=` | Open-Meteo proxy (10-min TTL cache) |
-| GET | `/api/transit` | HSL real-time departures |
+| POST | `/api/transit/plan` | HSL route planning / departures |
 | GET | `/api/flights` | Live aircraft overhead via OpenSky Network |
 | GET | `/api/todos` | List todo items |
 | POST | `/api/todos` | Create todo item |
@@ -155,12 +160,21 @@ Then open `http://localhost:8000/mirror` — FastAPI serves the built frontend f
 | GET | `/api/calendar/auth` | Begin Google OAuth flow |
 | GET | `/api/calendar/callback` | OAuth callback |
 | GET | `/api/calendar/events` | Fetch calendar events |
+| GET | `/api/spotify/status` | Spotify auth status |
+| GET | `/api/spotify/auth` | Begin Spotify OAuth flow |
+| GET | `/api/spotify/callback` | OAuth callback |
+| GET | `/api/spotify/now-playing` | Currently playing track |
+| GET | `/api/custom-widgets` | List AI-generated widgets |
+| POST | `/api/custom-widgets` | Create a custom widget |
+| DELETE | `/api/custom-widgets/{id}` | Delete a custom widget |
 | GET | `/api/saved-layouts` | List saved layouts |
 | POST | `/api/saved-layouts` | Save the current layout |
 | POST | `/api/saved-layouts/{id}/load` | Restore a saved layout |
 | DELETE | `/api/saved-layouts/{id}` | Delete a saved layout |
 | POST | `/api/chat` | Streaming AI agent endpoint (SSE) |
-| GET | `/api/events` | SSE stream (`layout_changed`, `settings_changed`, …) |
+| POST | `/api/transcribe` | Base64 WAV audio → transcript |
+| GET | `/api/system` | Non-secret env config (home lat/lon) |
+| GET | `/api/events` | SSE stream (`layout_changed`, `settings_changed`, `todos_changed`, `custom_widgets_changed`, `agent_activity`) |
 | GET | `/api/settings` | Key/value settings dict |
 | PUT | `/api/settings/{key}` | Update a setting |
 | GET | `/healthz` | Health check |
@@ -171,23 +185,15 @@ Copy `.env.example` to `.env` and fill in the values you need:
 
 | Variable | Description |
 |----------|-------------|
-| `GLASSISTANT_HOME_LAT` / `GLASSISTANT_HOME_LON` | Default coordinates for weather and flights widgets |
-| `GLASSISTANT_OLLAMA_URL` | Ollama base URL (default `http://localhost:11434`) |
-| `GLASSISTANT_OLLAMA_MODEL` | Model name (default `llama3.1`) |
+| `GLASSISTANT_DEFAULT_WEATHER_LAT` / `GLASSISTANT_DEFAULT_WEATHER_LON` | Default coordinates for the weather widgets (flights widget has its own per-widget lat/lon config) |
+| `GLASSISTANT_HOME_LAT` / `GLASSISTANT_HOME_LON` | Home coordinates used as the Transit widget's "Home" origin (exposed via `/api/system`) |
+| `GLASSISTANT_DIGITRANSIT_API_KEY` | HSL Digitransit key for the Transit widget |
+| `GLASSISTANT_OLLAMA_BASE_URL` | Ollama base URL (default `http://localhost:11434`) |
+| `GLASSISTANT_OLLAMA_MODEL` | Chat/agent model (default `gemma4:12b`) |
+| `GLASSISTANT_OLLAMA_TRANSCRIPTION_MODEL` | Audio transcription model (default `gemma4:4b`) |
 | `GLASSISTANT_GOOGLE_CLIENT_ID` / `GLASSISTANT_GOOGLE_CLIENT_SECRET` | Google OAuth credentials for Calendar widget |
 | `GLASSISTANT_SPOTIFY_CLIENT_ID` / `GLASSISTANT_SPOTIFY_CLIENT_SECRET` | Spotify app credentials for Spotify widget |
 
 ## Roadmap
 
-| # | Iteration | Status |
-|---|-----------|--------|
-| 1 | Foundation — backend, widgets, SSE, themes, ambient effects | ✅ Done |
-| 2 | AI agent core — Ollama, ReAct loop, tool registry, chat UI | ✅ Done |
-| 3 | Shopping list widget + agent tools | Not started |
-| 4 | Google Calendar widget + OAuth | ✅ Done |
-| 5 | Camera + vision (VisionBackend, multimodal Ollama) | Not started |
-| 6 | Agent memory (remember/recall, SQLite keyed table) | Not started |
-| 7 | Pi deployment (systemd, Chromium kiosk, deploy script) | Not started |
-| 8 | Voice — push-to-talk (STTBackend, browser mic → Whisper) | Not started |
-| 9 | Wake word (openWakeWord on-device) | Not started |
-| 10 | AI-generated widget components (stretch) | Not started |
+See [ROADMAP.md](ROADMAP.md) for what is built, what is planned, and rough effort estimates. Developer/agent conventions are in [CLAUDE.md](CLAUDE.md).

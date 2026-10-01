@@ -1,40 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { streamChat } from "../lib/api";
-import type { ChatEvent, ChatMessage } from "../lib/types";
-
-type AssistantBlock =
-  | { kind: "thinking"; text: string }
-  | { kind: "text"; text: string }
-  | { kind: "tool"; tool: string; args: Record<string, unknown>; result?: string };
+import { useChat, type AssistantBlock, type DisplayMessage } from "../lib/useChat";
+import { useVoiceRecorder } from "../lib/useVoiceRecorder";
+import { VoiceButton } from "./VoiceButton";
 
 type ToolBlock = Extract<AssistantBlock, { kind: "tool" }>;
 
-interface AssistantMessage {
-  role: "assistant";
-  blocks: AssistantBlock[];
-  status: string | null;
-  statusKind: "info" | "error";
-}
-
 const THINKING_WORDS = [
-  "Pondering",
-  "Noodling",
-  "Ruminating",
-  "Cogitating",
-  "Mulling it over",
-  "Brainstorming",
-  "Scheming",
-  "Daydreaming",
-  "Percolating",
-  "Contemplating",
+  "Pondering", "Noodling", "Ruminating", "Cogitating", "Mulling it over",
+  "Brainstorming", "Scheming", "Daydreaming", "Percolating", "Contemplating",
 ];
-
-interface UserMessage {
-  role: "user";
-  content: string;
-}
-
-type DisplayMessage = UserMessage | AssistantMessage;
 
 function ToolStepCard({ step }: { step: ToolBlock }) {
   const [expanded, setExpanded] = useState(false);
@@ -109,11 +83,27 @@ function StatusLine({ kind, content }: { kind: "info" | "error"; content: string
   );
 }
 
-function MessageBubble({ msg, streaming }: { msg: DisplayMessage; streaming: boolean }) {
+export function TranscribingBubble() {
+  return (
+    <div className="flex justify-end mb-3">
+      <div className="max-w-[85%] rounded-lg bg-accent/30 px-3 py-2 text-sm text-white/50 animate-pulse flex items-center gap-2">
+        <span>🎤</span>
+        <span>Transcribing…</span>
+      </div>
+    </div>
+  );
+}
+
+export function MessageBubble({ msg, streaming }: { msg: DisplayMessage; streaming: boolean }) {
   if (msg.role === "user") {
     return (
-      <div className="flex justify-end mb-3">
-        <div className="max-w-[85%] order-1 rounded-lg bg-accent/80 px-3 py-2 text-sm leading-relaxed text-white">
+      <div className="flex flex-col items-end mb-3 gap-0.5">
+        {msg.voice && (
+          <span className="text-[10px] text-white/35 flex items-center gap-1 mr-1">
+            🎤 Voice message
+          </span>
+        )}
+        <div className="max-w-[85%] rounded-lg bg-accent/80 px-3 py-2 text-sm leading-relaxed text-white">
           {msg.content}
         </div>
       </div>
@@ -145,118 +135,36 @@ function MessageBubble({ msg, streaming }: { msg: DisplayMessage; streaming: boo
 
 export function ChatPanel() {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [display, setDisplay] = useState<DisplayMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [streaming, setStreaming] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const { display, streaming, send, cancel, clear } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+
+  const voice = useVoiceRecorder({
+    onTranscript: (text) => {
+      setVoiceError(null);
+      void send(text, true);
+    },
+    onError: (msg) => setVoiceError(msg),
+  });
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [display]);
-
-  async function send() {
-    const content = draft.trim();
-    if (!content || streaming) return;
-
-    const userMsg: ChatMessage = { role: "user", content };
-    const nextMessages = [...messages, userMsg];
-
-    setMessages(nextMessages);
-    setDisplay((prev) => [...prev, { role: "user", content }]);
-    setDraft("");
-    setStreaming(true);
-
-    // Placeholder assistant entry mutated in-place as events arrive
-    const assistantEntry: AssistantMessage = {
-      role: "assistant",
-      blocks: [],
-      status: "Connecting to Ollama…",
-      statusKind: "info",
-    };
-    setDisplay((prev) => [...prev, assistantEntry]);
-
-    const abort = new AbortController();
-    abortRef.current = abort;
-
-    try {
-      for await (const event of streamChat(nextMessages, abort.signal)) {
-        handleEvent(event, assistantEntry);
-      }
-    } catch (e) {
-      if ((e as Error).name === "AbortError") {
-        assistantEntry.status = "Stopped";
-        assistantEntry.statusKind = "info";
-      } else {
-        assistantEntry.status = e instanceof Error ? e.message : String(e);
-        assistantEntry.statusKind = "error";
-      }
-      setDisplay((prev) => [...prev.slice(0, -1), { ...assistantEntry }]);
-    } finally {
-      setStreaming(false);
-      abortRef.current = null;
-      // Persist completed assistant message into chat history
-      const finalText = assistantEntry.blocks
-        .filter((b): b is Extract<AssistantBlock, { kind: "text" }> => b.kind === "text")
-        .map((b) => b.text)
-        .join("");
-      setMessages((prev) => [...prev, { role: "assistant", content: finalText }]);
-    }
-  }
-
-  function handleEvent(event: ChatEvent, assistant: AssistantMessage) {
-    if (event.type === "error") {
-      assistant.status = event.message;
-      assistant.statusKind = "error";
-      setDisplay((prev) => [...prev.slice(0, -1), { ...assistant }]);
-      return;
-    }
-    if (event.type === "done") return;
-
-    // Any non-error event means the stream is live — clear the "connecting" status.
-    if (assistant.status && assistant.statusKind === "info") {
-      assistant.status = null;
-    }
-
-    const blocks = assistant.blocks;
-    const last = blocks[blocks.length - 1];
-
-    if (event.type === "thinking_delta") {
-      // Consecutive thinking deltas merge into one block; a gap (tool call,
-      // text, or a fresh stream) starts a new one so blocks stay in order.
-      if (last?.kind === "thinking") last.text += event.content;
-      else blocks.push({ kind: "thinking", text: event.content });
-    } else if (event.type === "text_delta") {
-      if (last?.kind === "text") last.text += event.content;
-      else blocks.push({ kind: "text", text: event.content });
-    } else if (event.type === "tool_start") {
-      blocks.push({ kind: "tool", tool: event.tool, args: event.args });
-    } else if (event.type === "tool_result") {
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        const b = blocks[i];
-        if (b && b.kind === "tool" && b.tool === event.tool && b.result === undefined) {
-          b.result = event.result;
-          break;
-        }
-      }
-    }
-
-    assistant.blocks = [...blocks];
-    setDisplay((prev) => [...prev.slice(0, -1), { ...assistant }]);
-  }
+  }, [display, voice.state]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send(draft);
+      setDraft("");
     }
   }
 
-  function cancel() {
-    abortRef.current?.abort();
+  function handleSend() {
+    void send(draft);
+    setDraft("");
   }
 
   if (!open) {
@@ -279,10 +187,10 @@ export function ChatPanel() {
           <span className="text-accent">✦</span> Glassistant AI
         </div>
         <div className="flex items-center gap-2">
-          {messages.length > 0 && (
+          {display.length > 0 && (
             <button
               type="button"
-              onClick={() => { setMessages([]); setDisplay([]); }}
+              onClick={clear}
               className="text-xs text-white/40 hover:text-white/70"
               title="Clear conversation"
             >
@@ -309,17 +217,30 @@ export function ChatPanel() {
         {display.map((msg, i) => (
           <MessageBubble key={i} msg={msg} streaming={streaming && i === display.length - 1} />
         ))}
+        {voice.state === "transcribing" && <TranscribingBubble />}
       </div>
 
       {/* Input */}
       <div className="border-t border-white/10 p-3">
+        {voiceError && (
+          <div className="mb-2 rounded px-2 py-1 text-xs text-red-300 bg-red-500/10">
+            {voiceError}
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          <VoiceButton
+            state={voice.state}
+            elapsed={voice.elapsed}
+            onStart={voice.start}
+            onStop={() => void voice.stop()}
+            disabled={streaming}
+          />
           <textarea
             rows={2}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
-            disabled={streaming}
+            disabled={streaming || voice.state !== "idle"}
             placeholder="Ask something… (Enter to send)"
             className="flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-accent/50 disabled:opacity-50"
           />
@@ -334,8 +255,8 @@ export function ChatPanel() {
           ) : (
             <button
               type="button"
-              onClick={send}
-              disabled={!draft.trim()}
+              onClick={handleSend}
+              disabled={!draft.trim() || voice.state !== "idle"}
               className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
             >
               Send

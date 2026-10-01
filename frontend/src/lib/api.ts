@@ -110,6 +110,16 @@ export const api = {
   deleteSavedLayout: (id: number) =>
     request<void>("DELETE", `/api/saved-layouts/${id}`),
 
+  transcribe: async (blob: Blob, mimeType?: string) => {
+    const ab = await blob.arrayBuffer();
+    const audio_b64 = btoa(Array.from(new Uint8Array(ab), (b) => String.fromCharCode(b)).join(""));
+    const result = await request<{ transcript: string }>("POST", "/api/transcribe", {
+      audio_b64,
+      mime_type: mimeType ?? blob.type ?? "audio/webm",
+    });
+    return result.transcript;
+  },
+
   // Custom (AI-generated) widgets
   getCustomWidgets: () =>
     request<CustomWidget[]>("GET", "/api/custom-widgets"),

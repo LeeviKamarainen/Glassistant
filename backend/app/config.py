@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # Models with tool support: llama3.1, llama3.2, qwen2.5, qwen2.5-coder, mistral-nemo, etc.
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gemma4:12b"
+    # Smaller model used only for audio transcription. Must support vision/audio capability.
+    ollama_transcription_model: str = "gemma4:4b"
 
 
 def get_settings() -> Settings:

@@ -2,80 +2,66 @@
 
 ## What this project is
 
-A wall-mounted "magic mirror" home assistant. A Raspberry Pi drives a monitor behind a two-way mirror; widgets are arranged on a dynamic 3×3 grid. An AI agent (later iteration) running on a separate desktop via Ollama can rearrange the dashboard, answer questions, read camera input, and use tools.
+A wall-mounted "magic mirror" home assistant. A Raspberry Pi drives a monitor behind a two-way mirror; widgets are arranged on a configurable grid (default 12×7, stored in `app_settings`). An AI agent running on a separate desktop via Ollama can rearrange the dashboard, write custom widgets, and take voice input. Camera, memory, TTS and Pi deployment are still planned.
 
-Development is on Windows; Pi deployment is a later iteration.
+**What is built vs planned lives in [ROADMAP.md](ROADMAP.md).** Update it in the same commit as any feature work.
 
 ## Architecture ground rules
 
 - **Pi stays lean.** No ML/torch/transformers/vector DBs in the Pi process. Anything model-related is offloaded to the desktop over HTTP. The mirror bundle (`/mirror`) is aggressively code-split away from `/admin`.
-- **Swappable backends.** LLM, vision, STT, TTS, wake-word — each fronted by a Python interface so the implementation can move on-device without restructuring callers.
-- **One React app, two routes.** `/mirror` is the kiosk view (lean bundle, lazy-loaded). `/admin` is the responsive controller (heavier). Both share the widget library.
+- **Swappable backends.** LLM, vision, STT, TTS, wake-word — each fronted by a Python interface so the implementation can move on-device without restructuring callers. (Today only `OllamaService` exists, used directly; introduce the interface when a second implementation appears.)
+- **One React app, three routes.** `/mirror` is the kiosk view (lean bundle, lazy-loaded, **display-only — no buttons/inputs/interactive elements**). `/admin` is the desktop controller. `/mobile` is the touch controller. All share the widget library.
 - **SQLite is the source of truth.** All layout and settings changes go through the backend, which broadcasts via SSE to subscribed clients.
-- **SSE not WebSocket.** Backend → client push uses Server-Sent Events. Admin → backend is plain HTTP.
+- **SSE not WebSocket.** Backend → client push uses Server-Sent Events. Client → backend is plain HTTP.
 - **No ORM, no Alembic.** Plain `sqlite3`, hand-written SQL, numbered migration files in `backend/migrations/`.
+- **Keep LLM context small.** Local models have small windows: short system prompt (target ≤150 tokens), trimmed history, truncated tool results, no data the call doesn't need.
 
 ## Repository layout
 
 ```
 glassistant/
+├── ROADMAP.md                 # done / planned features with effort ratings
 ├── backend/
 │   ├── pyproject.toml
 │   ├── app/
-│   │   ├── main.py            # FastAPI factory, lifespan, static mount
-│   │   ├── config.py          # pydantic-settings, .env loader
+│   │   ├── main.py            # FastAPI factory, lifespan (services on app.state), static mount
+│   │   ├── config.py          # pydantic-settings, GLASSISTANT_* env vars
 │   │   ├── db.py              # sqlite3 helpers, migration runner
 │   │   ├── events.py          # SSE broadcaster (asyncio.Queue per subscriber)
 │   │   ├── dependencies.py    # FastAPI Depends helpers (get_db, get_broadcaster)
-│   │   ├── routers/
-│   │   │   ├── layout.py      # GET/POST/PATCH/DELETE widgets, reset
-│   │   │   ├── events.py      # GET /api/events (SSE stream)
-│   │   │   ├── weather.py     # GET /api/weather (Open-Meteo proxy + cache)
-│   │   │   └── settings.py    # GET /api/settings, PUT /api/settings/{key}
-│   │   ├── repositories/
-│   │   │   ├── widgets.py     # SQL CRUD for widgets table
-│   │   │   └── settings.py    # SQL CRUD for app_settings table
-│   │   ├── schemas/
-│   │   │   ├── widget.py      # Pydantic models for widgets
-│   │   │   └── settings.py    # Pydantic models for settings; KNOWN_THEMES, KNOWN_EFFECT_STYLES
-│   │   └── services/
-│   │       └── weather.py     # httpx Open-Meteo client, in-memory TTL cache
-│   ├── migrations/
-│   │   ├── 001_init.sql       # widgets table + position index
-│   │   ├── 002_settings.sql   # app_settings table (key/value), theme default
-│   │   └── 003_effect_style.sql  # seeds weather_effect_style default
-│   └── tests/
-│       ├── conftest.py
-│       ├── test_layout_api.py
-│       └── test_weather_cache.py
+│   │   ├── agent/
+│   │   │   ├── loop.py            # streaming ReAct loop, system prompt, history trimming
+│   │   │   ├── tools.py           # tool schemas + dispatch (layout + custom-widget tools)
+│   │   │   └── widget_registry.py # backend widget registry (feeds agent + /api/widget-types)
+│   │   ├── routers/           # layout, saved_layouts, settings, events, chat, transcribe,
+│   │   │                      # custom_widgets, todos, weather, flights, transit, calendar,
+│   │   │                      # spotify, system
+│   │   ├── repositories/      # widgets, saved_layouts, settings, todos, custom_widgets
+│   │   ├── schemas/           # Pydantic models (widget, settings, chat, todo, calendar,
+│   │   │                      #   saved_layout, custom_widget); KNOWN_THEMES etc.
+│   │   └── services/          # ollama (chat stream + audio transcribe), weather, flights,
+│   │                          #   transit, calendar, spotify — external API clients
+│   ├── migrations/            # 001_init … 009_widget_borders (note: two files numbered 004)
+│   └── tests/                 # conftest, test_layout_api, test_weather_cache, test_custom_widgets_api
 ├── frontend/
 │   ├── vite.config.ts         # proxies /api → backend:8000 in dev
-│   ├── tailwind.config.js
 │   └── src/
-│       ├── main.tsx           # router, lazy code-split Mirror/Admin
-│       ├── routes/
-│       │   ├── mirror.tsx     # kiosk view
-│       │   └── admin.tsx      # control panel
-│       ├── lib/
-│       │   ├── api.ts         # typed fetch wrappers
-│       │   ├── sse.ts         # EventSource hook with exponential backoff
-│       │   ├── types.ts       # mirrors backend Pydantic shapes
-│       │   ├── themes.ts      # ThemePalette definitions (mirror/moonlight/ember/forest)
-│       │   ├── useTheme.ts    # theme state + SSE sync hook
-│       │   └── useEffectStyle.ts  # weather effect style state + SSE sync hook
+│       ├── main.tsx           # router, lazy code-split Mirror/Admin/Mobile
+│       ├── routes/            # mirror.tsx, admin.tsx, mobile.tsx
+│       ├── lib/               # api.ts, sse.ts, types.ts (manually mirrors Pydantic),
+│       │                      # themes.ts, useTheme / useEffectStyle / useFontScale /
+│       │                      # useWidgetBorders / useGridConfig (settings + SSE hooks),
+│       │                      # useChat.ts, useVoiceRecorder.ts, customWidgets.ts,
+│       │                      # fitOverflowStore.ts, previewContext.ts
 │       ├── components/
-│       │   ├── Grid.tsx           # 3×3 CSS-grid layout container
-│       │   ├── WeatherEffect.tsx  # Ambient weather overlay (CSS calm mode)
-│       │   ├── WeatherEffectDynamic.tsx  # Canvas particle system (lazy-loaded)
-│       │   └── widgets/
-│       │       ├── registry.ts    # type → component map
-│       │       ├── Clock.tsx
-│       │       ├── DateW.tsx
-│       │       ├── Weather.tsx
-│       │       └── weather/icons.tsx  # WMO weather code → condition + SVG icons
+│       │   ├── Grid.tsx, AdminGrid.tsx, MobileGrid.tsx   # mirror / drag-and-drop / mobile grids
+│       │   ├── FitCell.tsx        # scales overflowing widget content to fit its cell
+│       │   ├── ChatPanel.tsx, VoiceButton.tsx, WidgetConfigEditor.tsx, AutoScroll.tsx
+│       │   ├── WeatherEffect.tsx, WeatherEffectDynamic.tsx
+│       │   └── widgets/       # registry.ts + one file per widget + CustomWidgetRenderer.tsx
 │       └── styles.css
+├── docs/screenshots/          # images referenced by README
 ├── .env.example
-├── .gitignore
 └── README.md
 ```
 
@@ -97,12 +83,12 @@ npm install
 npm run dev   # http://localhost:5173, proxies /api to :8000
 ```
 
-Open `http://localhost:5173/mirror` and `http://localhost:5173/admin`.
+Open `http://localhost:5173/mirror`, `/admin` and `/mobile`.
 
-### Tests
+### Tests / typecheck
 ```powershell
-cd backend
-pytest
+cd backend; pytest            # 22 tests
+cd frontend; npm run typecheck
 ```
 
 ### Production build (single process)
@@ -118,23 +104,36 @@ SQLite file: `backend/glassistant.db`. Delete to reset all state.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/layout` | Full widget list |
+| GET | `/api/layout` | Widget list + grid dimensions |
 | POST | `/api/widgets` | Create widget |
 | PATCH | `/api/widgets/{id}` | Update widget (partial) |
 | DELETE | `/api/widgets/{id}` | Delete widget |
 | POST | `/api/layout/reset` | Reset to default layout |
+| GET | `/api/widget-types` | Backend widget registry |
+| GET/POST/DELETE | `/api/saved-layouts`, `/api/saved-layouts/{id}` | List / save current / delete |
+| POST | `/api/saved-layouts/{id}/load` | Restore a saved layout |
+| GET/POST/DELETE | `/api/custom-widgets`, `/api/custom-widgets/{id}` | AI-generated widget source |
+| GET/POST/PATCH/DELETE | `/api/todos`, `/api/todos/{id}` | Todo items |
 | GET | `/api/weather?lat=&lon=` | Open-Meteo proxy (10-min TTL cache) |
-| GET | `/api/events` | SSE stream (`layout_changed`, `settings_changed`) |
+| GET | `/api/flights` | OpenSky proxy (short TTL cache) |
+| POST | `/api/transit/plan` | HSL Digitransit route planning |
+| GET | `/api/calendar/{status,auth,callback,events}` | Google Calendar OAuth + events |
+| GET | `/api/spotify/{status,auth,callback,now-playing}` | Spotify OAuth + now playing |
+| POST | `/api/chat` | Streaming agent (SSE) |
+| POST | `/api/transcribe` | Base64 WAV → transcript (Ollama, Gemma 4 audio) |
+| GET | `/api/system` | Non-secret env config (home lat/lon) |
+| GET | `/api/events` | SSE: `layout_changed`, `settings_changed`, `todos_changed`, `custom_widgets_changed`, `agent_activity`, `server_restarting` |
 | GET | `/api/settings` | Key/value settings dict |
-| PUT | `/api/settings/{key}` | Update a setting |
+| PUT | `/api/settings/{key}` | Update a setting (validated per key) |
 | GET | `/healthz` | Health check |
 
 ## SQLite schema
 
-- **`widgets`** — id, type, row, col, row_span, col_span, config_json, enabled, z_order, created_at, updated_at
-- **`app_settings`** — key (PK), value — currently stores `theme` and `weather_effect_style`
+Tables: `widgets`, `app_settings` (key/value), `saved_layouts`, `oauth_tokens` (Google + Spotify, keyed by provider), `todos`, `custom_widgets`, `schema_migrations`.
 
-Migrations live in `backend/migrations/` numbered `NNN_name.sql`. The migration runner in `db.py` tracks applied migrations in a `schema_migrations` table.
+`app_settings` keys: `theme`, `weather_effect_style`, `grid_rows`, `grid_cols`, `font_scale`, `show_widget_borders`. Validation (enums, int/float ranges) lives in `routers/settings.py`.
+
+Migrations live in `backend/migrations/` numbered `NNN_name.sql`; the runner tracks applied files by name in `schema_migrations`. Continue numbering from the highest existing number (currently `009`); never rename an applied file.
 
 ## Widget system
 
@@ -149,43 +148,37 @@ Every new widget requires exactly these steps — no exceptions:
    This is what keeps the AI agent's tool prompt accurate. Skipping it means the agent won't know the widget exists.
 
 4. **Data endpoint** *(only if needed)* — add a router/service/repository under `backend/app/` if the widget fetches its own data
+5. **Docs** — add a row to the widget tables in `README.md` and `ROADMAP.md`
 
-The type key (the dict key in both registry files) must be identical between frontend and backend. The `GET /api/widget-types` endpoint always reflects the current backend registry and can be used to verify alignment.
+The type key must be identical between frontend and backend. `GET /api/widget-types` reflects the backend registry and can be used to verify alignment. Widgets must be display-only (see ground rules); state that can change is edited from admin/mobile.
+
+Widgets are wrapped in `FitCell`, which scales content down if it overflows its grid cell — design for the cell, but overflow degrades gracefully.
+
+### Custom (AI-generated) widgets
+
+The agent can write new widgets via `create_custom_widget` and modify them with `get_custom_widget_source`, `edit_custom_widget_lines` and `edit_custom_widget_string`. Source (a single JSX function expression, max 8 KB, validated server-side with an API denylist) is stored in `custom_widgets`; the type key is `ai_*`. `CustomWidgetRenderer.tsx` transpiles with Sucrase and runs it via `new Function` inside an error boundary. **This is not a security sandbox** — acceptable for single-user LAN only.
+
+## Agent
+
+- `agent/loop.py` — one streaming loop against Ollama (`MAX_ITERS=6`, `MAX_HISTORY=6`, tool results truncated to 600 chars). Broadcasts `agent_activity` so the mirror's Assistant Activity widget can show progress.
+- `agent/tools.py` — tool schemas (built dynamically from the widget registry) and `dispatch`. Layout-mutating tools publish `layout_changed` like the REST endpoints do.
+- Models: `ollama_model` (chat, default `gemma4:12b`) and `ollama_transcription_model` (audio → text, default `gemma4:4b`). Thinking is off by default.
+- Voice: frontend records, converts to 16 kHz mono WAV, posts to `/api/transcribe`; transcript is fed into the normal chat flow.
 
 ## Themes
 
-Four themes defined in `frontend/src/lib/themes.ts`: `mirror`, `moonlight`, `ember`, `forest`. Each has `bg`, `fg`, `accent` CSS variables. The active theme is persisted in `app_settings` and broadcast via `settings_changed` SSE events. Theme names must stay in sync between `themes.ts` and `backend/app/schemas/settings.py::KNOWN_THEMES`.
+Four themes defined in `frontend/src/lib/themes.ts`: `mirror`, `moonlight`, `ember`, `forest`. Each has `bg`, `fg`, `accent` CSS variables. The active theme is persisted in `app_settings` and broadcast via `settings_changed`. Names must stay in sync with `backend/app/schemas/settings.py::KNOWN_THEMES`.
 
 ## Weather ambient effects
 
-The `WeatherEffect` component renders a full-screen ambient overlay behind widgets on `/mirror`. Two modes:
-- **calm** — pure CSS animations (rain drops, snowflakes, fog wisps, glow blobs)
-- **dynamic** — canvas-based particle system (`WeatherEffectDynamic.tsx`), lazy-loaded only when selected
-
-The active mode (`weather_effect_style`) is persisted in `app_settings` and synced via SSE.
+`WeatherEffect` renders a full-screen overlay behind widgets on `/mirror`. `calm` = pure CSS; `dynamic` = canvas particles (`WeatherEffectDynamic.tsx`, lazy-loaded). Mode is `weather_effect_style` in `app_settings`, synced via SSE.
 
 ## Constraints and style
 
 - No ORM, no Alembic, no lodash, no moment, no heavy UI libraries (MUI, AntD).
-- No drag-and-drop in admin (numeric inputs for now).
-- No auth — single-user local use.
+- Drag-and-drop in admin is hand-rolled (no DnD library); mobile uses numeric inputs.
+- No auth — single-user local use. Revisit before exposing beyond the LAN (see ROADMAP).
 - Frontend types in `lib/types.ts` are manually mirrored from backend Pydantic shapes.
 - Overlap and bounds validation lives in the repository layer, not the router.
-- All mutating layout/settings endpoints publish an SSE event after committing.
-
-## Roadmap iterations
-
-| # | Iteration | Status |
-|---|-----------|--------|
-| 1 | Foundation (backend, frontend, Clock/Date/Weather, SSE, themes, ambient effects) | **Done** |
-| 2 | AI agent core (Ollama, ReAct loop, tool registry, admin chat UI) | Not started |
-| 3 | Shopping list widget + agent tools | Not started |
-| 4 | Google Calendar widget + OAuth | Not started |
-| 5 | Camera + vision (VisionBackend, multimodal Ollama) | Not started |
-| 6 | Agent memory (remember/recall, SQLite keyed table) | Not started |
-| 7 | Pi deployment (systemd, Chromium kiosk, deploy script) | Not started |
-| 8 | Voice — push-to-talk (STTBackend, browser mic → Whisper) | Not started |
-| 9 | Wake word (openWakeWord on-device) | Not started |
-| 10 | AI-generated widget components (stretch) | Not started |
-
-Iterations 3–6 are independent and can be reordered. Iteration 7 can land any time after 1.
+- All mutating layout/settings/todo/custom-widget endpoints publish an SSE event after committing.
+- Secrets (API keys, OAuth client secrets, home coordinates) come from `.env` only; never hardcode or commit them.

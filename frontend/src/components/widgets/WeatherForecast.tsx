@@ -104,27 +104,27 @@ export function WeatherForecast({ widget }: WidgetProps) {
       <div className="flex items-center gap-4">
         <div
           className="text-fg-soft"
-          style={{ fontSize: "clamp(3.5rem, 9vw, 8rem)" }}
+          style={{ fontSize: "calc(clamp(3.5rem, 9vw, 8rem) * var(--font-scale, 1))" }}
         >
           <WeatherIcon condition={condition} />
         </div>
         <div className="flex flex-col gap-1">
           <div
             className="font-light tabular-nums text-fg"
-            style={{ fontSize: "clamp(2.2rem, 5.5vw, 5rem)" }}
+            style={{ fontSize: "calc(clamp(2.2rem, 5.5vw, 5rem) * var(--font-scale, 1))" }}
           >
             {temp != null ? `${temp}°` : "—"}
           </div>
           <div
             className="text-fg-dim tracking-wider"
-            style={{ fontSize: "clamp(0.65rem, 1.1vw, 1rem)" }}
+            style={{ fontSize: "calc(clamp(0.65rem, 1.1vw, 1rem) * var(--font-scale, 1))" }}
           >
             {conditionLabel(condition).toUpperCase()}
           </div>
           {(data.humidity_pct != null || data.wind_speed_kmh != null) && (
             <div
               className="text-fg-faint flex gap-3"
-              style={{ fontSize: "clamp(0.6rem, 0.95vw, 0.85rem)" }}
+              style={{ fontSize: "calc(clamp(0.6rem, 0.95vw, 0.85rem) * var(--font-scale, 1))" }}
             >
               {data.humidity_pct != null && (
                 <span>{Math.round(data.humidity_pct)}% RH</span>
@@ -156,19 +156,19 @@ export function WeatherForecast({ widget }: WidgetProps) {
               >
                 <div
                   className="text-fg-faint tracking-wide"
-                  style={{ fontSize: "clamp(0.55rem, 0.9vw, 0.75rem)" }}
+                  style={{ fontSize: "calc(clamp(0.65rem, 1vw, 0.85rem) * var(--font-scale, 1))" }}
                 >
                   {dayName}
                 </div>
                 <div
                   className="text-fg-soft"
-                  style={{ fontSize: "clamp(1.2rem, 3vw, 2.2rem)" }}
+                  style={{ fontSize: "calc(clamp(1.2rem, 3vw, 2.2rem) * var(--font-scale, 1))" }}
                 >
                   <WeatherIcon condition={fc} />
                 </div>
                 <div
                   className="flex gap-1 tabular-nums"
-                  style={{ fontSize: "clamp(0.6rem, 0.95vw, 0.8rem)" }}
+                  style={{ fontSize: "calc(clamp(0.7rem, 1.1vw, 0.9rem) * var(--font-scale, 1))" }}
                 >
                   {hi != null && <span className="text-fg">{hi}°</span>}
                   {lo != null && (

@@ -315,7 +315,7 @@ export function Transit({ widget }: WidgetProps) {
             {/* Route label */}
             <div
               className="text-fg-dim uppercase tracking-widest"
-              style={{ fontSize: "clamp(0.65rem, 1.1vw, 0.9rem)" }}
+              style={{ fontSize: "calc(clamp(0.75rem, 1.3vw, 1.05rem) * var(--font-scale, 1))" }}
             >
               {route.label}
             </div>
@@ -336,13 +336,13 @@ export function Transit({ widget }: WidgetProps) {
                       <RouteBadge mode={leg?.mode ?? "BUS"} routeShortName={leg?.route_short_name ?? null} />
                       <span
                         className="tabular-nums text-fg font-light"
-                        style={{ fontSize: "clamp(0.95rem, 2vw, 1.5rem)" }}
+                        style={{ fontSize: "calc(clamp(0.95rem, 2vw, 1.5rem) * var(--font-scale, 1))" }}
                       >
                         {fmtTime(itin.departure)}
                       </span>
                       <span
                         className="text-fg-faint"
-                        style={{ fontSize: "clamp(0.65rem, 1.1vw, 0.9rem)" }}
+                        style={{ fontSize: "calc(clamp(0.75rem, 1.3vw, 1.05rem) * var(--font-scale, 1))" }}
                       >
                         {fmtDuration(itin.duration_seconds)}
                       </span>

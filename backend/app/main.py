@@ -25,6 +25,7 @@ from app.routers import spotify as spotify_router
 from app.routers import system as system_router
 from app.routers import todos as todos_router
 from app.routers import saved_layouts as saved_layouts_router
+from app.routers import transcribe as transcribe_router
 from app.routers import transit as transit_router
 from app.routers import weather as weather_router
 from app.services.calendar import CalendarService
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ollama = OllamaService(
         base_url=settings.ollama_base_url,
         model=settings.ollama_model,
+        transcription_model=settings.ollama_transcription_model,
     )
     app.state.weather = WeatherService(ttl_seconds=settings.weather_cache_ttl_seconds)
     app.state.flights = FlightsService(ttl_seconds=settings.flights_cache_ttl_seconds)
@@ -124,6 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(calendar_router.router)
     app.include_router(spotify_router.router)
     app.include_router(saved_layouts_router.router)
+    app.include_router(transcribe_router.router)
     app.include_router(custom_widgets_router.router)
 
     @app.get("/healthz")

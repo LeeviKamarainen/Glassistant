@@ -20,12 +20,18 @@ router = APIRouter(prefix="/api", tags=["settings"])
 _ENUM_VALUES: dict[str, set[str]] = {
     "theme": KNOWN_THEMES,
     "weather_effect_style": KNOWN_EFFECT_STYLES,
+    "show_widget_borders": {"true", "false"},
 }
 
 # Settings that must be integers within [lo, hi].
 _INT_RANGE: dict[str, tuple[int, int]] = {
     "grid_rows": (1, 50),
     "grid_cols": (1, 50),
+}
+
+# Settings that must be floats within [lo, hi].
+_FLOAT_RANGE: dict[str, tuple[float, float]] = {
+    "font_scale": (0.5, 3.0),
 }
 
 
@@ -70,6 +76,21 @@ async def put_setting(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"{key} must be between {lo} and {hi}",
+            )
+    float_range = _FLOAT_RANGE.get(key)
+    if float_range is not None:
+        try:
+            fv = float(body.value)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{key} must be a number",
+            )
+        lo_f, hi_f = float_range
+        if not (lo_f <= fv <= hi_f):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{key} must be between {lo_f} and {hi_f}",
             )
     settings_repo.set_value(conn, key, body.value)
     await _publish_settings_changed(broadcaster, conn)

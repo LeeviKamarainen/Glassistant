@@ -48,13 +48,13 @@ export function DateTime({ widget }: WidgetProps) {
       <div className="flex flex-col items-center gap-1">
         <div
           className="font-light tracking-[0.25em] text-fg-dim"
-          style={{ fontSize: "clamp(0.6rem, 1vw, 0.85rem)" }}
+          style={{ fontSize: "calc(clamp(0.6rem, 1vw, 0.85rem) * var(--font-scale, 1))" }}
         >
           {weekday}
         </div>
         <div
           className="font-light tracking-[0.15em] text-fg"
-          style={{ fontSize: "clamp(0.75rem, 1.2vw, 1.05rem)" }}
+          style={{ fontSize: "calc(clamp(0.75rem, 1.2vw, 1.05rem) * var(--font-scale, 1))" }}
         >
           {day} {month} {year}
         </div>
@@ -62,7 +62,7 @@ export function DateTime({ widget }: WidgetProps) {
       <div className="flex items-baseline gap-1.5">
         <span
           className="font-light tracking-tight tabular-nums"
-          style={{ fontSize: "clamp(2.5rem, 7vw, 7rem)" }}
+          style={{ fontSize: "calc(clamp(2.5rem, 7vw, 7rem) * var(--font-scale, 1))" }}
         >
           {hh}
           <span className="opacity-50">:</span>
@@ -71,7 +71,7 @@ export function DateTime({ widget }: WidgetProps) {
         {showSeconds && (
           <span
             className="font-light tabular-nums text-fg-soft"
-            style={{ fontSize: "clamp(1rem, 2.2vw, 2rem)" }}
+            style={{ fontSize: "calc(clamp(1rem, 2.2vw, 2rem) * var(--font-scale, 1))" }}
           >
             {ss}
           </span>
@@ -79,7 +79,7 @@ export function DateTime({ widget }: WidgetProps) {
         {hour12 && (
           <span
             className="text-fg-faint tracking-widest"
-            style={{ fontSize: "clamp(0.75rem, 1.2vw, 1rem)" }}
+            style={{ fontSize: "calc(clamp(0.75rem, 1.2vw, 1rem) * var(--font-scale, 1))" }}
           >
             {suffix}
           </span>

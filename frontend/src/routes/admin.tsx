@@ -12,6 +12,8 @@ import { useCustomWidgets } from "../lib/customWidgets";
 import { useSse } from "../lib/sse";
 import { useEffectStyle } from "../lib/useEffectStyle";
 import type { EffectStyle } from "../lib/useEffectStyle";
+import { useFontScale, FONT_SCALE_MIN, FONT_SCALE_MAX, FONT_SCALE_STEP } from "../lib/useFontScale";
+import { useWidgetBorders } from "../lib/useWidgetBorders";
 import { useTheme } from "../lib/useTheme";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
@@ -27,6 +29,8 @@ type AdminTab = "layout" | "components";
 export default function Admin() {
   const theme = useTheme();
   const effectStyle = useEffectStyle();
+  const fontScale = useFontScale();
+  const widgetBorders = useWidgetBorders();
   const gridConfig = useGridConfig();
 
   const [activeTab, setActiveTab] = useState<AdminTab>("layout");
@@ -124,37 +128,90 @@ export default function Admin() {
           </div>
         )}
 
-        {/* Theme */}
-        <section className="mb-8">
-          <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">Theme</h2>
-          <div className="flex flex-wrap gap-2">
-            {theme.options.map((opt) => (
-              <ThemeSwatch
-                key={opt}
-                name={opt}
-                active={theme.name === opt}
-                onSelect={theme.set}
-                disabled={busy}
-              />
-            ))}
-          </div>
-        </section>
+        {/* ── Appearance ───────────────────────────────────── */}
+        <section className="mb-8 rounded-lg border border-white/[0.08] p-5 flex flex-col gap-6">
+          <h2 className="text-sm font-medium uppercase tracking-widest text-fg-dim">Appearance</h2>
 
-        {/* Weather effect style */}
-        <section className="mb-8">
-          <h2 className="mb-2 text-sm uppercase tracking-wide text-fg-dim">
-            Weather effect style
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {effectStyle.options.map((opt) => (
-              <EffectStyleButton
-                key={opt}
-                value={opt}
-                active={effectStyle.style === opt}
-                onSelect={effectStyle.set}
-                disabled={busy}
+          {/* Theme */}
+          <div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-fg-faint">Theme</div>
+            <div className="flex flex-wrap gap-2">
+              {theme.options.map((opt) => (
+                <ThemeSwatch
+                  key={opt}
+                  name={opt}
+                  active={theme.name === opt}
+                  onSelect={theme.set}
+                  disabled={busy}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Weather effect style */}
+          <div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-fg-faint">Weather effect</div>
+            <div className="flex flex-wrap gap-2">
+              {effectStyle.options.map((opt) => (
+                <EffectStyleButton
+                  key={opt}
+                  value={opt}
+                  active={effectStyle.style === opt}
+                  onSelect={effectStyle.set}
+                  disabled={busy}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Font scale */}
+          <div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-fg-faint">Font scale</div>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min={FONT_SCALE_MIN}
+                max={FONT_SCALE_MAX}
+                step={FONT_SCALE_STEP}
+                value={fontScale.scale}
+                onChange={(e) => fontScale.set(Number(e.target.value))}
+                className="flex-1 accent-white/70"
               />
-            ))}
+              <span className="w-10 text-right text-sm tabular-nums text-fg-dim">
+                {fontScale.scale.toFixed(2)}×
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs text-fg-faint">
+              Scales all widget text on /mirror. 1.00 is the default. Per-widget overrides are in each widget's config.
+            </p>
+          </div>
+
+          {/* Widget borders */}
+          <div>
+            <div className="mb-2 text-xs uppercase tracking-wide text-fg-faint">Widget cell background</div>
+            <div className="flex flex-wrap gap-2">
+              {([true, false] as const).map((val) => (
+                <button
+                  key={String(val)}
+                  type="button"
+                  onClick={() => widgetBorders.set(val)}
+                  disabled={busy || widgetBorders.show === val}
+                  className={`flex flex-col items-start rounded-md border px-3 py-2 text-sm transition ${
+                    widgetBorders.show === val
+                      ? "border-white/60 bg-white/5"
+                      : "border-white/10 hover:bg-white/5"
+                  } disabled:cursor-default`}
+                >
+                  <span className="text-fg">{val ? "Show" : "Hide"}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-fg-faint">
+                    {val ? "subtle cell bg" : "transparent"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-fg-faint">
+              Show or hide the subtle translucent background behind each widget on /mirror.
+            </p>
           </div>
         </section>
 
@@ -1119,10 +1176,25 @@ function WidgetRow({
   const isScrollManaged = WIDGET_REGISTRY[widget.type]?.scrollManaged ?? false;
   const autoScroll =
     ((widget.config as Record<string, unknown> | null)?.auto_scroll as boolean | undefined) ?? false;
+  const widgetFontScale =
+    ((widget.config as Record<string, unknown> | null)?.font_scale as number | null | undefined) ?? null;
 
   const handleAutoScrollToggle = async () => {
     const base = (widget.config as Record<string, unknown>) ?? {};
     await onUpdate(widget.id, { config: { ...base, auto_scroll: !autoScroll } });
+  };
+
+  const handleFontScaleSave = async (raw: string) => {
+    const base = (widget.config as Record<string, unknown>) ?? {};
+    if (raw === "") {
+      const { font_scale: _removed, ...rest } = base;
+      await onUpdate(widget.id, { config: rest });
+    } else {
+      const v = parseFloat(raw);
+      if (!isNaN(v)) {
+        await onUpdate(widget.id, { config: { ...base, font_scale: Math.min(3, Math.max(0.5, v)) } });
+      }
+    }
   };
 
   useEffect(() => {
@@ -1264,6 +1336,28 @@ function WidgetRow({
                 </div>
               </label>
             )}
+
+            {/* Per-widget font scale */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-fg leading-snug">Font scale</div>
+                <div className="mt-0.5 text-xs text-fg-faint leading-relaxed">
+                  Override the global font scale for this widget. Leave blank to use the global setting.
+                </div>
+              </div>
+              <input
+                key={`fs-${widget.id}-${widgetFontScale ?? "none"}`}
+                type="number"
+                min={0.5}
+                max={3}
+                step={0.05}
+                defaultValue={widgetFontScale !== null ? widgetFontScale : ""}
+                placeholder="global"
+                onBlur={(e) => handleFontScaleSave(e.target.value)}
+                disabled={disabled}
+                className="w-20 shrink-0 rounded-md border border-white/10 bg-black px-2 py-1 text-sm text-fg outline-none focus:border-white/40 disabled:opacity-40 placeholder-fg-faint"
+              />
+            </div>
 
             {/* Form editor (schema-driven) */}
             {hasSchema && !showRaw && schema ? (

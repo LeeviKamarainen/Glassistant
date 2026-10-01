@@ -91,27 +91,27 @@ export function Weather({ widget }: WidgetProps) {
     >
       <div
         className="text-fg-soft"
-        style={{ fontSize: "clamp(3rem, 7vw, 6rem)" }}
+        style={{ fontSize: "calc(clamp(3rem, 7vw, 6rem) * var(--font-scale, 1))" }}
       >
         <WeatherIcon condition={condition} />
       </div>
       <div className="flex flex-col gap-1">
         <div
           className="font-light tabular-nums text-fg"
-          style={{ fontSize: "clamp(1.8rem, 4.5vw, 4rem)" }}
+          style={{ fontSize: "calc(clamp(1.8rem, 4.5vw, 4rem) * var(--font-scale, 1))" }}
         >
           {temp != null ? `${temp}°` : "—"}
         </div>
         <div
           className="text-fg-dim tracking-wider"
-          style={{ fontSize: "clamp(0.65rem, 1.1vw, 1rem)" }}
+          style={{ fontSize: "calc(clamp(0.65rem, 1.1vw, 1rem) * var(--font-scale, 1))" }}
         >
           {conditionLabel(condition).toUpperCase()}
         </div>
         {(data.humidity_pct != null || data.wind_speed_kmh != null) && (
           <div
             className="text-fg-faint mt-1 flex gap-3"
-            style={{ fontSize: "clamp(0.6rem, 0.95vw, 0.85rem)" }}
+            style={{ fontSize: "calc(clamp(0.75rem, 1.2vw, 1rem) * var(--font-scale, 1))" }}
           >
             {data.humidity_pct != null && (
               <span>{Math.round(data.humidity_pct)}% RH</span>

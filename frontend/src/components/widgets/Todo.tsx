@@ -161,7 +161,7 @@ export function Todo({ widget }: WidgetProps) {
                 {/* Icon */}
                 <span
                   className="shrink-0 w-6 text-center leading-snug mt-0.5"
-                  style={{ fontSize: "clamp(0.85rem, 1.4vw, 1.1rem)" }}
+                  style={{ fontSize: "calc(clamp(0.85rem, 1.4vw, 1.1rem) * var(--font-scale, 1))" }}
                 >
                   {todo.icon ?? "·"}
                 </span>
@@ -171,14 +171,14 @@ export function Todo({ widget }: WidgetProps) {
                   <div className="flex items-baseline gap-2 flex-wrap">
                     <span
                       className={`leading-snug ${todo.done ? "line-through text-fg-faint" : "text-fg-soft"}`}
-                      style={{ fontSize: "clamp(0.75rem, 1.3vw, 1rem)" }}
+                      style={{ fontSize: "calc(clamp(0.75rem, 1.3vw, 1rem) * var(--font-scale, 1))" }}
                     >
                       {todo.name}
                     </span>
                     {todo.due_date && (
                       <span
                         className={`${dateClass} shrink-0`}
-                        style={{ fontSize: "clamp(0.6rem, 0.9vw, 0.78rem)" }}
+                        style={{ fontSize: "calc(clamp(0.7rem, 1.1vw, 0.9rem) * var(--font-scale, 1))" }}
                       >
                         {overdue && "⚠ "}{todo.due_date}
                       </span>
@@ -187,7 +187,7 @@ export function Todo({ widget }: WidgetProps) {
                   {todo.description && (
                     <div
                       className="text-fg-faint truncate"
-                      style={{ fontSize: "clamp(0.6rem, 0.85vw, 0.72rem)" }}
+                      style={{ fontSize: "calc(clamp(0.65rem, 1vw, 0.82rem) * var(--font-scale, 1))" }}
                     >
                       {todo.description}
                     </div>

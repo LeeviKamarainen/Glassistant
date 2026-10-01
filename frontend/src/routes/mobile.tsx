@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MobileGrid } from "../components/MobileGrid";
+import { VoiceButton } from "../components/VoiceButton";
+import { MessageBubble, TranscribingBubble } from "../components/ChatPanel";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import { api } from "../lib/api";
 import { useSse } from "../lib/sse";
@@ -8,11 +10,13 @@ import { useEffectStyle } from "../lib/useEffectStyle";
 import type { EffectStyle } from "../lib/useEffectStyle";
 import { useTheme } from "../lib/useTheme";
 import { useGridConfig } from "../lib/useGridConfig";
+import { useChat } from "../lib/useChat";
+import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
 import type { Layout, SseEvent, Todo, Widget, WidgetCreate, WidgetUpdate } from "../lib/types";
 
-type MobileTab = "layout" | "todos" | "countdown" | "theme" | "components";
+type MobileTab = "layout" | "todos" | "countdown" | "theme" | "components" | "ai";
 
 interface CountdownConfig {
   label?: string;
@@ -88,7 +92,7 @@ export default function Mobile() {
           className="flex overflow-x-auto border-t border-white/[0.06]"
           style={{ scrollbarWidth: "none" }}
         >
-          {(["layout", "todos", "countdown", "theme", "components"] as MobileTab[]).map((t) => (
+          {(["layout", "todos", "countdown", "theme", "components", "ai"] as MobileTab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -167,6 +171,8 @@ export default function Mobile() {
             gridCols={gridConfig.cols}
           />
         )}
+
+        {tab === "ai" && <AiTab />}
       </main>
     </div>
   );
@@ -784,6 +790,132 @@ function ComponentCard({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AI tab
+// ---------------------------------------------------------------------------
+
+function AiTab() {
+  const { display, streaming, send, cancel, clear } = useChat();
+  const [draft, setDraft] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const voice = useVoiceRecorder({
+    onTranscript: (text) => {
+      setVoiceError(null);
+      void send(text, true);
+    },
+    onError: (msg) => setVoiceError(msg),
+  });
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [display, voice.state]);
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void send(draft);
+      setDraft("");
+    }
+  }
+
+  function handleSend() {
+    void send(draft);
+    setDraft("");
+  }
+
+  return (
+    <div className="flex flex-col" style={{ height: "calc(100vh - 112px)" }}>
+      {/* Message thread */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-2">
+        {display.length === 0 && (
+          <p className="text-center text-xs text-fg-faint mt-8 px-4">
+            Talk to your mirror assistant. Ask it to add widgets, set reminders, or anything else.
+          </p>
+        )}
+        {display.map((msg, i) => (
+          <MessageBubble key={i} msg={msg} streaming={streaming && i === display.length - 1} />
+        ))}
+        {voice.state === "transcribing" && <TranscribingBubble />}
+      </div>
+
+      {/* Large mic when recording (no text typed) */}
+      {voice.state !== "idle" && draft === "" && (
+        <div className="flex justify-center py-4">
+          <VoiceButton
+            state={voice.state}
+            elapsed={voice.elapsed}
+            onStart={voice.start}
+            onStop={() => void voice.stop()}
+            disabled={streaming}
+            size="lg"
+          />
+        </div>
+      )}
+
+      {/* Input bar */}
+      <div className="border-t border-white/10 pt-3 pb-2">
+        {voiceError && (
+          <div className="mb-2 rounded px-3 py-1.5 text-xs text-red-300 bg-red-500/10">
+            {voiceError}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <VoiceButton
+            state={voice.state}
+            elapsed={voice.elapsed}
+            onStart={voice.start}
+            onStop={() => void voice.stop()}
+            disabled={streaming}
+            size="sm"
+          />
+          <textarea
+            rows={2}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onKeyDown}
+            disabled={streaming || voice.state !== "idle"}
+            placeholder="Type or use the mic…"
+            className="flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-fg placeholder-fg-faint focus:outline-none focus:ring-1 focus:ring-accent/50 disabled:opacity-50"
+          />
+          <div className="flex flex-col gap-1.5">
+            {streaming ? (
+              <button
+                type="button"
+                onClick={cancel}
+                className="rounded-lg bg-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/20"
+              >
+                Stop
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!draft.trim() || voice.state !== "idle"}
+                className="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+              >
+                Send
+              </button>
+            )}
+            {display.length > 0 && (
+              <button
+                type="button"
+                onClick={clear}
+                className="text-center text-[10px] text-fg-faint hover:text-fg"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

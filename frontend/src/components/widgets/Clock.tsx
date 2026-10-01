@@ -35,7 +35,7 @@ export function Clock({ widget }: WidgetProps) {
     <div className="flex items-baseline gap-1.5 leading-none">
       <span
         className="font-light tracking-tight tabular-nums"
-        style={{ fontSize: "clamp(2.5rem, 7vw, 7rem)" }}
+        style={{ fontSize: "calc(clamp(2.5rem, 7vw, 7rem) * var(--font-scale, 1))" }}
       >
         {hh}
         <span className="opacity-50">:</span>
@@ -44,7 +44,7 @@ export function Clock({ widget }: WidgetProps) {
       {showSeconds && (
         <span
           className="font-light tabular-nums text-fg-soft"
-          style={{ fontSize: "clamp(1rem, 2.2vw, 2rem)" }}
+          style={{ fontSize: "calc(clamp(1rem, 2.2vw, 2rem) * var(--font-scale, 1))" }}
         >
           {ss}
         </span>
@@ -52,7 +52,7 @@ export function Clock({ widget }: WidgetProps) {
       {hour12 && (
         <span
           className="text-fg-faint tracking-widest"
-          style={{ fontSize: "clamp(0.75rem, 1.2vw, 1rem)" }}
+          style={{ fontSize: "calc(clamp(0.75rem, 1.2vw, 1rem) * var(--font-scale, 1))" }}
         >
           {suffix}
         </span>

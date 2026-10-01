@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Force-include animation utilities used in runtime-evaluated custom widget code.
+   Tailwind v4 JIT never scans DB-stored source, so these classes would otherwise
+   be absent from the bundle. */
+@source inline("animate-spin animate-pulse animate-bounce animate-ping");
+
 /* ── Theme tokens ──────────────────────────────────────────────────────────
    Defaults are overridden at runtime by useTheme() setting CSS variables
    on the :root element. All themes keep --theme-bg near-black because the
@@ -123,6 +128,20 @@ select {
   background-position: right 8px center;
   padding-right: 28px;
 }
+
+/* ── Font-scale overrides for Tailwind text utilities inside widget cells ──
+   --font-scale is set on :root by useFontScale(). These rules have higher
+   specificity than Tailwind's utilities (attribute + class > class alone) so
+   they win without !important even when Tailwind uses @layer utilities. */
+
+[data-widget-cell] .text-xs    { font-size: calc(0.75rem   * var(--font-scale, 1)); }
+[data-widget-cell] .text-sm    { font-size: calc(0.875rem  * var(--font-scale, 1)); }
+[data-widget-cell] .text-base  { font-size: calc(1rem      * var(--font-scale, 1)); }
+[data-widget-cell] .text-lg    { font-size: calc(1.125rem  * var(--font-scale, 1)); }
+[data-widget-cell] .text-xl    { font-size: calc(1.25rem   * var(--font-scale, 1)); }
+[data-widget-cell] .text-2xl   { font-size: calc(1.5rem    * var(--font-scale, 1)); }
+[data-widget-cell] .text-3xl   { font-size: calc(1.875rem  * var(--font-scale, 1)); }
+[data-widget-cell] .text-4xl   { font-size: calc(2.25rem   * var(--font-scale, 1)); }
 
 .todo-scroll { scrollbar-width: none; }
 .todo-scroll::-webkit-scrollbar { display: none; }

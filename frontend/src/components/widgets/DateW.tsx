@@ -26,19 +26,19 @@ export function DateW(_: WidgetProps) {
     >
       <div
         className="font-light tracking-[0.3em] text-fg-dim"
-        style={{ fontSize: "clamp(0.65rem, 1.1vw, 1rem)" }}
+        style={{ fontSize: "calc(clamp(0.65rem, 1.1vw, 1rem) * var(--font-scale, 1))" }}
       >
         {weekday}
       </div>
       <div
         className="font-light tabular-nums my-1.5"
-        style={{ fontSize: "clamp(2.5rem, 6vw, 6rem)" }}
+        style={{ fontSize: "calc(clamp(2.5rem, 6vw, 6rem) * var(--font-scale, 1))" }}
       >
         {day}
       </div>
       <div
         className="font-light tracking-[0.3em] text-fg-dim"
-        style={{ fontSize: "clamp(0.65rem, 1.1vw, 1rem)" }}
+        style={{ fontSize: "calc(clamp(0.65rem, 1.1vw, 1rem) * var(--font-scale, 1))" }}
       >
         {month}
       </div>

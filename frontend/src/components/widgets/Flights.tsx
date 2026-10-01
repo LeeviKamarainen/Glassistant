@@ -151,7 +151,7 @@ export function Flights({ widget }: WidgetProps) {
           <div
             className="grid gap-x-2 text-fg-faint uppercase tracking-wider select-none"
             style={{
-              fontSize: "clamp(0.5rem, 0.8vw, 0.65rem)",
+              fontSize: "calc(clamp(0.65rem, 1vw, 0.8rem) * var(--font-scale, 1))",
               gridTemplateColumns: "1.5rem 5rem 1fr 3.5rem 3rem 1rem",
             }}
           >
@@ -170,7 +170,7 @@ export function Flights({ widget }: WidgetProps) {
           {data.aircraft.length > maxShown && (
             <p
               className="text-fg-faint italic"
-              style={{ fontSize: "clamp(0.55rem, 0.85vw, 0.7rem)" }}
+              style={{ fontSize: "calc(clamp(0.65rem, 1vw, 0.8rem) * var(--font-scale, 1))" }}
             >
               +{data.aircraft.length - maxShown} more
             </p>
@@ -188,21 +188,21 @@ function Header({ count, radiusKm }: { count: number | null; radiusKm: number })
     <div className="flex items-baseline gap-2">
       <span
         className="text-fg font-light"
-        style={{ fontSize: "clamp(0.85rem, 1.6vw, 1.3rem)" }}
+        style={{ fontSize: "calc(clamp(0.85rem, 1.6vw, 1.3rem) * var(--font-scale, 1))" }}
       >
         ✈ Overhead
       </span>
       {count != null && (
         <span
           className="text-accent font-semibold tabular-nums"
-          style={{ fontSize: "clamp(0.85rem, 1.6vw, 1.3rem)" }}
+          style={{ fontSize: "calc(clamp(0.85rem, 1.6vw, 1.3rem) * var(--font-scale, 1))" }}
         >
           {count}
         </span>
       )}
       <span
         className="text-fg-faint"
-        style={{ fontSize: "clamp(0.5rem, 0.85vw, 0.7rem)" }}
+        style={{ fontSize: "calc(clamp(0.65rem, 1vw, 0.85rem) * var(--font-scale, 1))" }}
       >
         within {radiusKm} km
       </span>
@@ -215,7 +215,7 @@ function AircraftRow({ ac }: { ac: Aircraft }) {
     <div
       className="grid gap-x-2 items-center text-fg-soft"
       style={{
-        fontSize: "clamp(0.6rem, 1vw, 0.8rem)",
+        fontSize: "calc(clamp(0.75rem, 1.2vw, 1rem) * var(--font-scale, 1))",
         gridTemplateColumns: "1.5rem 5rem 1fr 3.5rem 3rem 1rem",
       }}
     >

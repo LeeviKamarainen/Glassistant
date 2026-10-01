@@ -209,7 +209,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetMeta> = {
     label: "Calendar",
     description: "Google Calendar — current week view with events per day.",
     defaultSize: { rowSpan: 2, colSpan: 7 },
-    // No configurable options.
+    // Calendar fills the cell with h-full and handles event overflow itself (MAX_VISIBLE + "+N more").
+    scrollManaged: true,
   },
   todo: {
     component: Todo,

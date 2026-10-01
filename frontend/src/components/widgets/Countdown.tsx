@@ -51,32 +51,32 @@ export function Countdown({ widget }: WidgetProps) {
     <div className="anim-fade-in flex flex-col items-center justify-center leading-none gap-1.5">
       <div
         className="text-fg-dim tracking-widest uppercase"
-        style={{ fontSize: "clamp(0.55rem, 0.85vw, 0.75rem)" }}
+        style={{ fontSize: "calc(clamp(0.55rem, 0.85vw, 0.75rem) * var(--font-scale, 1))" }}
       >
         {isPast ? "since" : "until"}
       </div>
       <div
         className="text-fg-soft tracking-wider text-center"
-        style={{ fontSize: "clamp(0.7rem, 1.15vw, 0.95rem)" }}
+        style={{ fontSize: "calc(clamp(0.7rem, 1.15vw, 0.95rem) * var(--font-scale, 1))" }}
       >
         {label.toUpperCase()}
       </div>
       <div
         className="font-light tabular-nums text-fg mt-1"
-        style={{ fontSize: "clamp(3rem, 8vw, 7rem)" }}
+        style={{ fontSize: "calc(clamp(3rem, 8vw, 7rem) * var(--font-scale, 1))" }}
       >
         {days}
       </div>
       <div
         className="text-fg-dim tracking-widest"
-        style={{ fontSize: "clamp(0.55rem, 0.85vw, 0.75rem)" }}
+        style={{ fontSize: "calc(clamp(0.55rem, 0.85vw, 0.75rem) * var(--font-scale, 1))" }}
       >
         {isPast ? "DAYS AGO" : "DAYS"}
       </div>
       {showTime && days === 0 && (
         <div
           className="text-fg-soft tabular-nums font-light mt-1"
-          style={{ fontSize: "clamp(1rem, 2vw, 1.8rem)" }}
+          style={{ fontSize: "calc(clamp(1rem, 2vw, 1.8rem) * var(--font-scale, 1))" }}
         >
           {pad(hours)}:{pad(minutes)}:{pad(seconds)}
         </div>
@@ -84,7 +84,7 @@ export function Countdown({ widget }: WidgetProps) {
       {showTime && days > 0 && (
         <div
           className="text-fg-faint tabular-nums mt-0.5"
-          style={{ fontSize: "clamp(0.65rem, 1vw, 0.85rem)" }}
+          style={{ fontSize: "calc(clamp(0.65rem, 1vw, 0.85rem) * var(--font-scale, 1))" }}
         >
           {pad(hours)}h {pad(minutes)}m
         </div>

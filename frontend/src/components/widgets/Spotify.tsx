@@ -80,7 +80,7 @@ export function Spotify({ widget: _widget }: WidgetProps) {
         <div className="text-fg-soft text-sm">Spotify not connected</div>
         <div
           className="text-fg-faint"
-          style={{ fontSize: "clamp(0.55rem, 0.85vw, 0.72rem)" }}
+          style={{ fontSize: "calc(clamp(0.55rem, 0.85vw, 0.72rem) * var(--font-scale, 1))" }}
         >
           Visit /api/spotify/auth to authorize
         </div>
@@ -130,19 +130,19 @@ export function Spotify({ widget: _widget }: WidgetProps) {
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
           <div
             className="text-fg font-medium truncate leading-snug"
-            style={{ fontSize: "clamp(0.75rem, 1.3vw, 1.05rem)" }}
+            style={{ fontSize: "calc(clamp(0.75rem, 1.3vw, 1.05rem) * var(--font-scale, 1))" }}
           >
             {track.title}
           </div>
           <div
             className="text-fg-soft truncate"
-            style={{ fontSize: "clamp(0.65rem, 1.05vw, 0.85rem)" }}
+            style={{ fontSize: "calc(clamp(0.65rem, 1.05vw, 0.85rem) * var(--font-scale, 1))" }}
           >
             {track.artist}
           </div>
           <div
             className="text-fg-faint truncate"
-            style={{ fontSize: "clamp(0.55rem, 0.85vw, 0.7rem)" }}
+            style={{ fontSize: "calc(clamp(0.55rem, 0.85vw, 0.7rem) * var(--font-scale, 1))" }}
           >
             {track.album}
           </div>
@@ -160,13 +160,13 @@ export function Spotify({ widget: _widget }: WidgetProps) {
         <div className="flex justify-between">
           <span
             className="text-fg-faint tabular-nums"
-            style={{ fontSize: "clamp(0.5rem, 0.75vw, 0.65rem)" }}
+            style={{ fontSize: "calc(clamp(0.5rem, 0.75vw, 0.65rem) * var(--font-scale, 1))" }}
           >
             {fmtMs(track.progress_ms)}
           </span>
           <span
             className="text-fg-faint tabular-nums"
-            style={{ fontSize: "clamp(0.5rem, 0.75vw, 0.65rem)" }}
+            style={{ fontSize: "calc(clamp(0.5rem, 0.75vw, 0.65rem) * var(--font-scale, 1))" }}
           >
             {fmtMs(track.duration_ms)}
           </span>
@@ -179,7 +179,7 @@ export function Spotify({ widget: _widget }: WidgetProps) {
         {!track.is_playing && (
           <span
             className="text-fg-faint"
-            style={{ fontSize: "clamp(0.5rem, 0.75vw, 0.65rem)" }}
+            style={{ fontSize: "calc(clamp(0.5rem, 0.75vw, 0.65rem) * var(--font-scale, 1))" }}
           >
             Paused
           </span>

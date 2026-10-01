@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "./widgets/registry";
+import { useOverflowingWidgets } from "../lib/fitOverflowStore";
 import type { Widget, WidgetUpdate } from "../lib/types";
 
 /** Gap between grid cells in pixels. Both cell backgrounds and widget cards
@@ -26,8 +27,10 @@ export function AdminGrid({
   onAdd,
   busy,
 }: AdminGridProps) {
+  const overflowing = useOverflowingWidgets();
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [hoverCell, setHoverCell] = useState<{ row: number; col: number } | null>(null);
+  const [hoveredWidgetId, setHoveredWidgetId] = useState<number | null>(null);
   const [pendingCell, setPendingCell] = useState<{ row: number; col: number } | null>(null);
   const [pendingType, setPendingType] = useState<string>(WIDGET_TYPES[0] ?? "clock");
   const gridRef = useRef<HTMLDivElement>(null);
@@ -171,7 +174,7 @@ export function AdminGrid({
   const dropOk = hoverCell ? canDropAt(hoverCell.row, hoverCell.col) : false;
 
   return (
-    <div className="relative" style={{ margin: "0 auto", width: "fit-content", maxWidth: "100%" }}>
+    <div className="relative">
       {/*
         Single CSS grid — background cells AND widget cards are both grid items
         with explicit placement, so they share the exact same track sizes and gap.
@@ -183,12 +186,9 @@ export function AdminGrid({
         style={{
           display: "grid",
           height: "480px",
-          aspectRatio: `${gridCols} / ${gridRows}`,
-          maxWidth: "100%",
           gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
           gridTemplateRows: `repeat(${gridRows}, 1fr)`,
           gap: `${CELL_GAP}px`,
-          // Background colour shows through the gap and rounded corners
           backgroundColor: "rgba(255,255,255,0.05)",
         }}
         onDragOver={handleDragOver}
@@ -248,19 +248,29 @@ export function AdminGrid({
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = "move";
                   setDraggingId(widget.id);
+                  setHoveredWidgetId(null);
                   setSelectedWidgetId(null);
                 }}
                 onDragEnd={() => {
                   setDraggingId(null);
                   setHoverCell(null);
                 }}
+                onMouseEnter={() => { if (!draggingId) setHoveredWidgetId(widget.id); }}
+                onMouseLeave={() => setHoveredWidgetId(null)}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedWidgetId(widget.id === selectedWidgetId ? null : widget.id);
                   setPendingCell(null);
                 }}
+                title={`${widget.type} — r${widget.row} c${widget.col} · ${widget.row_span}×${widget.col_span}`}
                 className={`h-full w-full cursor-grab active:cursor-grabbing rounded-sm border bg-white/10 backdrop-blur-sm p-1.5 flex flex-col gap-0.5 overflow-hidden transition-colors ${
-                  selectedWidgetId === widget.id ? "border-white/60" : "border-white/25"
+                  overflowing.has(widget.id)
+                    ? selectedWidgetId === widget.id
+                      ? "border-amber-400/80"
+                      : "border-amber-400/50 hover:border-amber-400/80 hover:bg-white/15"
+                    : selectedWidgetId === widget.id
+                      ? "border-white/60"
+                      : "border-white/25 hover:border-white/50 hover:bg-white/15"
                 }`}
               >
                 <span className="text-[11px] font-medium text-fg truncate leading-tight">
@@ -269,6 +279,11 @@ export function AdminGrid({
                 <span className="text-[9px] text-fg-faint leading-tight">
                   r{widget.row} c{widget.col} · {widget.row_span}×{widget.col_span}
                 </span>
+                {overflowing.has(widget.id) && (
+                  <span className="text-[8px] font-medium uppercase tracking-wide text-amber-300/90 leading-tight">
+                    ↕ too small
+                  </span>
+                )}
                 <button
                   type="button"
                   className="mt-auto text-[9px] text-red-300/50 hover:text-red-300 text-left leading-none"
@@ -301,6 +316,35 @@ export function AdminGrid({
           />
         )}
       </div>
+
+      {/* ── Hover tooltip ── */}
+      {hoveredWidgetId !== null && !draggingId && gridRef.current && (() => {
+        const w = widgets.find((x) => x.id === hoveredWidgetId);
+        if (!w) return null;
+        const el = gridRef.current!;
+        const cellW = (el.clientWidth - (gridCols - 1) * CELL_GAP) / gridCols;
+        const cellH = (el.clientHeight - (gridRows - 1) * CELL_GAP) / gridRows;
+        const centerX = w.col * (cellW + CELL_GAP) + (w.col_span * cellW + (w.col_span - 1) * CELL_GAP) / 2;
+        const topY = w.row * (cellH + CELL_GAP);
+        const bottomY = (w.row + w.row_span) * (cellH + CELL_GAP) - CELL_GAP;
+        const showBelow = w.row === 0;
+        return (
+          <div
+            key={hoveredWidgetId}
+            className="absolute z-50 pointer-events-none"
+            style={
+              showBelow
+                ? { left: centerX, top: bottomY + 4, transform: "translateX(-50%)" }
+                : { left: centerX, top: topY - 4, transform: "translate(-50%, -100%)" }
+            }
+          >
+            <div className="rounded bg-black/90 border border-white/20 px-2 py-1 text-xs text-fg whitespace-nowrap shadow-xl">
+              <span className="font-medium">{w.type}</span>
+              <span className="text-fg-faint ml-2">r{w.row} c{w.col} · {w.row_span}×{w.col_span}</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Add-widget dropdown ── */}
       {pendingCell && (
