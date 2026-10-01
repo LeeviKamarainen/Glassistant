@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MobileGrid } from "../components/MobileGrid";
 import { VoiceButton } from "../components/VoiceButton";
-import { MessageBubble, TranscribingBubble } from "../components/ChatPanel";
+import { FastToggle, MessageBubble, TranscribingBubble } from "../components/ChatPanel";
 import { WIDGET_REGISTRY, WIDGET_TYPES } from "../components/widgets/registry";
 import { api } from "../lib/api";
 import { useSse } from "../lib/sse";
@@ -11,6 +11,7 @@ import type { EffectStyle } from "../lib/useEffectStyle";
 import { useTheme } from "../lib/useTheme";
 import { useGridConfig } from "../lib/useGridConfig";
 import { useChat } from "../lib/useChat";
+import { useFastMode } from "../lib/useFastMode";
 import { useVoiceRecorder } from "../lib/useVoiceRecorder";
 import { THEMES } from "../lib/themes";
 import type { ThemeName } from "../lib/themes";
@@ -799,7 +800,8 @@ function ComponentCard({
 // ---------------------------------------------------------------------------
 
 function AiTab() {
-  const { display, streaming, send, cancel, clear } = useChat();
+  const [fast, setFast] = useFastMode();
+  const { display, streaming, send, cancel, clear } = useChat(fast);
   const [draft, setDraft] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -833,6 +835,9 @@ function AiTab() {
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 112px)" }}>
+      <div className="flex justify-end px-3 pt-2">
+        <FastToggle fast={fast} onChange={setFast} />
+      </div>
       {/* Message thread */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-2">
         {display.length === 0 && (

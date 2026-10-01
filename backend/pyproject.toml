@@ -19,6 +19,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Fast tool-calling path in the AI chat (see app/agent/fast.py). ~35 MB model, no torch.
+needle = ["cactus-needle>=3.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

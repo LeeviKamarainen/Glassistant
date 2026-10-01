@@ -32,6 +32,7 @@ glassistant/
 │   │   ├── agent/
 │   │   │   ├── loop.py            # streaming ReAct loop, system prompt, history trimming
 │   │   │   ├── tools.py           # tool schemas + dispatch (layout + custom-widget tools)
+│   │   │   ├── fast.py            # opt-in Needle fast path: name-based tools → dispatch, Ollama fallback
 │   │   │   └── widget_registry.py # backend widget registry (feeds agent + /api/widget-types)
 │   │   ├── routers/           # layout, saved_layouts, settings, events, chat, transcribe,
 │   │   │                      # custom_widgets, todos, weather, flights, transit, calendar,
@@ -39,10 +40,10 @@ glassistant/
 │   │   ├── repositories/      # widgets, saved_layouts, settings, todos, custom_widgets
 │   │   ├── schemas/           # Pydantic models (widget, settings, chat, todo, calendar,
 │   │   │                      #   saved_layout, custom_widget); KNOWN_THEMES etc.
-│   │   └── services/          # ollama (chat stream + audio transcribe), weather, flights,
+│   │   └── services/          # ollama (chat stream + audio transcribe), needle (tiny tool-call model), weather, flights,
 │   │                          #   transit, calendar, spotify — external API clients
 │   ├── migrations/            # 001_init … 009_widget_borders (note: two files numbered 004)
-│   └── tests/                 # conftest, test_layout_api, test_weather_cache, test_custom_widgets_api
+│   └── tests/                 # conftest, test_layout_api, test_weather_cache, test_custom_widgets_api, test_fast_agent
 ├── frontend/
 │   ├── vite.config.ts         # proxies /api → backend:8000 in dev
 │   └── src/
@@ -87,7 +88,7 @@ Open `http://localhost:5173/mirror`, `/admin` and `/mobile`.
 
 ### Tests / typecheck
 ```powershell
-cd backend; pytest            # 22 tests
+cd backend; pytest            # 47 tests
 cd frontend; npm run typecheck
 ```
 
@@ -163,6 +164,7 @@ The agent can write new widgets via `create_custom_widget` and modify them with 
 - `agent/loop.py` — one streaming loop against Ollama (`MAX_ITERS=6`, `MAX_HISTORY=6`, tool results truncated to 600 chars). Broadcasts `agent_activity` so the mirror's Assistant Activity widget can show progress.
 - `agent/tools.py` — tool schemas (built dynamically from the widget registry) and `dispatch`. Layout-mutating tools publish `layout_changed` like the REST endpoints do.
 - Models: `ollama_model` (chat, default `gemma4:12b`) and `ollama_transcription_model` (audio → text, default `gemma4:4b`). Thinking is off by default.
+- Fast mode (experimental): `ChatRequest.fast` → `agent/fast.py` sends only the last user message to Needle (`services/needle.py`, optional `[needle]` extra, runs in a worker thread). It uses its own 5-tool set (`add_widget(type, position?)`, `remove_widget(widget)`, `nudge_widget(widget, direction, steps=1)`, `move_widget(widget, x?, y?, position?)`, `set_theme(theme)`; above 5 tools Needle's retrieval step engages, so `reset_layout` stays with Ollama), with user-language widget labels ("todo list") mapped back to type keys, bounds in the schema and argument descriptions saying which words to copy. Widgets are named by **type** and resolved to ids/row/col in `fast.py` — ids/lists in the query, `system` facts or enum labels measurably made Needle pick the wrong widget. The tool schema is **static** (changes only when a custom widget type is created): the engine needs ~1.2 s to re-initialise whenever its toolset changes, so per-request schemas and multi-pass designs that alternate toolsets are slow and were not more accurate. The `nudge`/`move` split and which one carries the verb "move" matters (see ROADMAP). `check_fast_calls` runs before anything executes (widget mentioned in the sentence, unique move target, destination present) and, with no match / `ungrounded` / confidence < `needle_min_confidence` (0.7) / Needle missing, the request falls back to `run_agent`. Replies are built from tool results (Needle writes no text); a `needle` SSE event (outcome, reason, confidence, threshold, ms, proposed/held calls, reasoning) renders as a collapsible `NeedleCard` in the chat. Toggle is per client (`useFastMode`, localStorage). Misses are logged as `needle q=…` for fine-tuning; a tuned `.cact` goes in `GLASSISTANT_NEEDLE_WEIGHTS`. Don't lower the floor to make it look better — wrong calls score up to ~0.55.
 - Voice: frontend records, converts to 16 kHz mono WAV, posts to `/api/transcribe`; transcript is fed into the normal chat flow.
 
 ## Themes

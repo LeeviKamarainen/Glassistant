@@ -12,3 +12,5 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
+    # Try Needle (fast tool-calling model) first; falls back to the Ollama agent.
+    fast: bool = False

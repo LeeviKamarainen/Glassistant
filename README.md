@@ -121,6 +121,17 @@ ollama pull gemma4:4b
 
 Set `GLASSISTANT_OLLAMA_MODEL` / `GLASSISTANT_OLLAMA_TRANSCRIPTION_MODEL` in `.env` to use other models. The chat panel in `/admin` will activate automatically once Ollama is reachable. Voice input records in the browser, converts to 16 kHz WAV and sends it to `/api/transcribe`.
 
+### Needle fast mode (optional, experimental)
+
+[Needle](https://github.com/cactus-compute/needle) is a ~35 MB tool-calling model that runs on CPU in a few hundred milliseconds. With the **⚡ Fast** toggle on in the chat, your message goes to Needle first; it handles simple layout and theme commands ("move the clock to the bottom left", "move the weather 2 steps down", "move the todo to x 4 y 6", "remove the date", "switch to the ember theme") without waking the LLM. Coordinates are grid cells, 0-based: `x` is the column, `y` the row. Anything it does not recognise, is unsure about (below the confidence floor), or that looks wrong (e.g. the widget it picked is not mentioned in your sentence, or there are two of that widget) falls back to Ollama before anything is changed. With the untuned model the default floor of 0.7 is deliberately strict, so expect many fallbacks until you fine-tune it.
+
+```powershell
+cd backend
+pip install -e .[needle]   # first use downloads the model (~35 MB) from Hugging Face
+```
+
+The toggle is stored per device. Each fast-mode reply starts with a collapsible ⚡ Needle card: its confidence against the threshold, whether it ran or fell back to Ollama, and (expanded) the call(s) it proposed, anything it held back, its reasoning, the fallback reason and the latency. Needle reports one confidence per turn, not a ranked list of alternatives. Tune `GLASSISTANT_NEEDLE_MIN_CONFIDENCE` (see Configuration) and point `GLASSISTANT_NEEDLE_WEIGHTS` at a fine-tuned `.cact` file once you have one. Needle's anonymous telemetry is disabled by default.
+
 ### Tests
 
 ```powershell
@@ -171,7 +182,7 @@ Then open `http://localhost:8000/mirror` — FastAPI serves the built frontend f
 | POST | `/api/saved-layouts` | Save the current layout |
 | POST | `/api/saved-layouts/{id}/load` | Restore a saved layout |
 | DELETE | `/api/saved-layouts/{id}` | Delete a saved layout |
-| POST | `/api/chat` | Streaming AI agent endpoint (SSE) |
+| POST | `/api/chat` | Streaming AI agent endpoint (SSE); body `{messages, fast?}` — `fast: true` tries Needle first |
 | POST | `/api/transcribe` | Base64 WAV audio → transcript |
 | GET | `/api/system` | Non-secret env config (home lat/lon) |
 | GET | `/api/events` | SSE stream (`layout_changed`, `settings_changed`, `todos_changed`, `custom_widgets_changed`, `agent_activity`) |
@@ -191,6 +202,8 @@ Copy `.env.example` to `.env` and fill in the values you need:
 | `GLASSISTANT_OLLAMA_BASE_URL` | Ollama base URL (default `http://localhost:11434`) |
 | `GLASSISTANT_OLLAMA_MODEL` | Chat/agent model (default `gemma4:12b`) |
 | `GLASSISTANT_OLLAMA_TRANSCRIPTION_MODEL` | Audio transcription model (default `gemma4:4b`) |
+| `GLASSISTANT_NEEDLE_MIN_CONFIDENCE` | Fast mode: Needle calls below this confidence fall back to Ollama (default `0.7`) |
+| `GLASSISTANT_NEEDLE_WEIGHTS` | Fast mode: path to a fine-tuned Needle `.cact` file (empty = base model) |
 | `GLASSISTANT_GOOGLE_CLIENT_ID` / `GLASSISTANT_GOOGLE_CLIENT_SECRET` | Google OAuth credentials for Calendar widget |
 | `GLASSISTANT_SPOTIFY_CLIENT_ID` / `GLASSISTANT_SPOTIFY_CLIENT_SECRET` | Spotify app credentials for Spotify widget |
 

@@ -146,11 +146,12 @@ export const api = {
 export async function* streamChat(
   messages: ChatMessage[],
   signal?: AbortSignal,
+  fast = false,
 ): AsyncGenerator<ChatEvent> {
   const resp = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, fast }),
     signal,
   });
   if (!resp.ok) {

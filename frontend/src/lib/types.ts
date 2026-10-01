@@ -203,9 +203,27 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface NeedleCall {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/** What the Needle fast path proposed for a turn (mirrors `run_fast_agent`'s `needle` event). */
+export interface NeedleReport {
+  outcome: "executed" | "fallback";
+  reason: string | null;
+  confidence: number | null;
+  threshold: number;
+  ms: number;
+  calls: NeedleCall[];
+  held: NeedleCall[];
+  reasoning: string | null;
+}
+
 export type ChatEvent =
   | { type: "thinking_delta"; content: string }
   | { type: "text_delta"; content: string }
+  | ({ type: "needle" } & NeedleReport)
   | { type: "tool_start"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: string }
   | { type: "done" }

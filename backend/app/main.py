@@ -30,6 +30,7 @@ from app.routers import transit as transit_router
 from app.routers import weather as weather_router
 from app.services.calendar import CalendarService
 from app.services.flights import FlightsService
+from app.services.needle import NeedleService
 from app.services.ollama import OllamaService
 from app.services.spotify import SpotifyService
 from app.services.transit import TransitService
@@ -54,6 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         model=settings.ollama_model,
         transcription_model=settings.ollama_transcription_model,
     )
+    app.state.needle = NeedleService(weights=settings.needle_weights)
     app.state.weather = WeatherService(ttl_seconds=settings.weather_cache_ttl_seconds)
     app.state.flights = FlightsService(ttl_seconds=settings.flights_cache_ttl_seconds)
     app.state.transit = (

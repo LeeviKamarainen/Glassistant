@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { streamChat } from "./api";
-import type { ChatMessage, ChatEvent } from "./types";
+import type { ChatMessage, ChatEvent, NeedleReport } from "./types";
 
 export type AssistantBlock =
   | { kind: "thinking"; text: string }
   | { kind: "text"; text: string }
+  | ({ kind: "needle" } & NeedleReport)
   | { kind: "tool"; tool: string; args: Record<string, unknown>; result?: string };
 
 export interface AssistantMessage {
@@ -22,7 +23,8 @@ export interface UserMessage {
 
 export type DisplayMessage = UserMessage | AssistantMessage;
 
-export function useChat() {
+/** `fast` = try the Needle tool-calling model first (backend falls back to Ollama). */
+export function useChat(fast = false) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [display, setDisplay] = useState<DisplayMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -50,6 +52,9 @@ export function useChat() {
     } else if (event.type === "text_delta") {
       if (last?.kind === "text") last.text += event.content;
       else blocks.push({ kind: "text", text: event.content });
+    } else if (event.type === "needle") {
+      const { type: _type, ...report } = event;
+      blocks.push({ kind: "needle", ...report });
     } else if (event.type === "tool_start") {
       blocks.push({ kind: "tool", tool: event.tool, args: event.args });
     } else if (event.type === "tool_result") {
@@ -79,7 +84,7 @@ export function useChat() {
     const assistantEntry: AssistantMessage = {
       role: "assistant",
       blocks: [],
-      status: "Connecting to Ollama…",
+      status: fast ? "Asking Needle…" : "Connecting to Ollama…",
       statusKind: "info",
     };
     setDisplay((prev) => [...prev, assistantEntry]);
@@ -88,7 +93,7 @@ export function useChat() {
     abortRef.current = abort;
 
     try {
-      for await (const event of streamChat(nextMessages, abort.signal)) {
+      for await (const event of streamChat(nextMessages, abort.signal, fast)) {
         handleEvent(event, assistantEntry);
       }
     } catch (e) {

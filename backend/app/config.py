@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     # Smaller model used only for audio transcription. Must support vision/audio capability.
     ollama_transcription_model: str = "gemma4:4b"
 
+    # Needle fast path (optional: pip install -e .[needle]). Calls scoring below
+    # the confidence floor fall back to the Ollama agent. `needle_weights` can
+    # point at a fine-tuned .cact file; leave empty for the base model.
+    needle_min_confidence: float = 0.7
+    needle_weights: str = ""
+
 
 def get_settings() -> Settings:
     return Settings()
